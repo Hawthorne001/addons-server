@@ -1,16 +1,16 @@
 Hello,
 
-A reviewer at addons.mozilla.org found an issue when reviewing version {{ number }} of the add-on {{ name }} and requests additional information. You are receiving this email because {{ email_reason }}.
+A reviewer at addons.mozilla.org is contacting you regarding version {{ number }} of the add-on {{ name }}. You are receiving this email because {{ email_reason }}.
 
-*********
 {{ author }} wrote:
 
 {{ comments|safe }}
 
-*********
-
+{% if has_attachment %}
+An attachment was provided. To respond or view the file, visit {{ url }}.
+{% else %}
 To respond, please reply to this email or visit {{ url }}.
-
+{% endif %}
 
 Thank you for your attention.
 

@@ -4,16 +4,34 @@ import waffle
 from django_statsd.clients import statsd
 
 import olympia.core.logger
-from olympia.constants.blocklist import MLBF_BASE_ID_CONFIG_KEY, MLBF_TIME_CONFIG_KEY
+from olympia.constants.blocklist import (
+    MLBF_BASE_ID_CONFIG_KEY,
+    MLBF_TIME_CONFIG_KEY,
+    BlockListAction,
+)
 from olympia.zadmin.models import get_config
 
 from .mlbf import MLBF
-from .models import Block, BlocklistSubmission
-from .tasks import cleanup_old_files, process_blocklistsubmission, upload_filter
+from .models import Block, BlocklistSubmission, BlockType
+from .tasks import process_blocklistsubmission, upload_filter
 from .utils import datetime_to_ts
 
 
 log = olympia.core.logger.getLogger('z.cron')
+
+
+def get_generation_time():
+    return datetime_to_ts()
+
+
+def get_last_generation_time():
+    return get_config(MLBF_TIME_CONFIG_KEY, None, json_value=True)
+
+
+def get_base_generation_time(block_type: BlockType):
+    return get_config(
+        MLBF_BASE_ID_CONFIG_KEY(block_type, compat=True), None, json_value=True
+    )
 
 
 def get_blocklist_last_modified_time():
@@ -39,8 +57,6 @@ def upload_mlbf_to_remote_settings(*, bypass_switch=False, force_base=False):
 
 
 def _upload_mlbf_to_remote_settings(*, force_base=False):
-    last_generation_time = get_config(MLBF_TIME_CONFIG_KEY, 0, json_value=True)
-
     log.info('Starting Upload MLBF to remote settings cron job.')
 
     # This timestamp represents the point in time when all previous addon
@@ -50,64 +66,96 @@ def _upload_mlbf_to_remote_settings(*, force_base=False):
     # An add-on version/file from after this time can't be reliably asserted -
     # there may be false positives or false negatives.
     # https://github.com/mozilla/addons-server/issues/13695
-    generation_time = datetime_to_ts()
-    mlbf = MLBF.generate_from_db(generation_time)
-    previous_filter = MLBF.load_from_storage(last_generation_time)
+    mlbf = MLBF.generate_from_db(get_generation_time())
+    previous_filter = MLBF.load_from_storage(
+        # This timestamp represents the last time the MLBF was generated and uploaded.
+        # It could have been a base filter or a stash.
+        get_last_generation_time()
+    )
 
-    changes_count = mlbf.blocks_changed_since_previous(previous_filter)
-    statsd.incr(
-        'blocklist.cron.upload_mlbf_to_remote_settings.blocked_changed', changes_count
-    )
-    need_update = (
-        force_base
-        or last_generation_time < get_blocklist_last_modified_time()
-        or changes_count
-    )
-    if not need_update:
+    base_filters: dict[BlockType, MLBF | None] = {key: None for key in BlockType}
+
+    upload_filters = False
+    upload_stash = False
+
+    # Determine which base filters need to be re uploaded
+    # and whether a new stash needs to be created.
+    for block_type in BlockType:
+        base_filter = MLBF.load_from_storage(get_base_generation_time(block_type))
+        base_filters[block_type] = base_filter
+
+        # For now we upload both filters together when either exceeds
+        # the change threshold. Additionally we brute force clear all stashes
+        # when uploading filters. This is the easiest way to ensure that stashes
+        # are always newer than any existing filters, a requirement of the way
+        # FX is reading the blocklist stash and filter sets.
+        # We may attempt handling block types separately in the future as a
+        # performance optimization https://github.com/mozilla/addons/issues/15217.
+        if (
+            force_base
+            or base_filter is None
+            or mlbf.should_upload_filter(block_type, base_filter)
+        ):
+            upload_filters = True
+            upload_stash = False
+        # Only update the stash if we should AND if we aren't already
+        # re-uploading the filters.
+        elif mlbf.should_upload_stash(block_type, previous_filter or base_filter):
+            upload_stash = True
+
+    if not upload_filters and not upload_stash:
         log.info('No new/modified/deleted Blocks in database; skipping MLBF generation')
+        # Delete the locally generated MLBF directory and files as they are not needed.
+        mlbf.delete()
         return
 
     statsd.incr(
         'blocklist.cron.upload_mlbf_to_remote_settings.blocked_count',
-        len(mlbf.blocked_items),
+        len(mlbf.data.blocked_items),
+    )
+    statsd.incr(
+        'blocklist.cron.upload_mlbf_to_remote_settings.soft_blocked_count',
+        len(mlbf.data.soft_blocked_items),
     )
     statsd.incr(
         'blocklist.cron.upload_mlbf_to_remote_settings.not_blocked_count',
-        len(mlbf.not_blocked_items),
+        len(mlbf.data.not_blocked_items),
     )
 
-    base_filter_id = get_config(MLBF_BASE_ID_CONFIG_KEY, 0, json_value=True)
-    # optimize for when the base_filter was the previous generation so
-    # we don't have to load the blocked JSON file twice.
-    base_filter = (
-        MLBF.load_from_storage(base_filter_id)
-        if last_generation_time != base_filter_id
-        else previous_filter
-    )
+    if upload_filters:
+        for block_type in BlockType:
+            mlbf.generate_and_write_filter(block_type)
 
-    make_base_filter = (
-        force_base or not base_filter_id or mlbf.should_reset_base_filter(base_filter)
-    )
+        # Upload both filters and clear the stash to keep
+        # all of the records in sync with the expectations of FX.
+        actions = [
+            BlockListAction.UPLOAD_BLOCKED_FILTER,
+            BlockListAction.UPLOAD_SOFT_BLOCKED_FILTER,
+            BlockListAction.CLEAR_STASH,
+        ]
 
-    if last_generation_time and not make_base_filter:
-        try:
-            mlbf.generate_and_write_stash(previous_filter)
-        except FileNotFoundError:
-            log.info("No previous blocked.json so we can't create a stash.")
-            # fallback to creating a new base if stash fails
-            make_base_filter = True
-    if make_base_filter:
-        mlbf.generate_and_write_filter()
+    elif upload_stash:
+        # We generate unified stashes, which means they can contain data
+        # for both soft and hard blocks. We need the base filters of each
+        # block type to determine what goes in a stash.
+        mlbf.generate_and_write_stash(
+            previous_mlbf=previous_filter,
+            blocked_base_filter=base_filters[BlockType.BLOCKED],
+            soft_blocked_base_filter=base_filters[BlockType.SOFT_BLOCKED],
+        )
+        actions = [
+            BlockListAction.UPLOAD_STASH,
+        ]
 
-    upload_filter.delay(generation_time, is_base=make_base_filter)
-
-    if base_filter_id:
-        cleanup_old_files.delay(base_filter_id=base_filter_id)
+    # Serialize the actions to strings because celery doesn't support enums.
+    upload_filter.delay(mlbf.created_at, actions=[action.name for action in actions])
 
 
 def process_blocklistsubmissions():
     qs = BlocklistSubmission.objects.filter(
-        signoff_state__in=BlocklistSubmission.SIGNOFF_STATES_APPROVED,
+        signoff_state__in=(
+            BlocklistSubmission.SIGNOFF_STATES.STATES_APPROVED.values.keys()
+        ),
         delayed_until__lte=datetime.now(),
     )
     for sub in qs:

@@ -11,9 +11,9 @@ msgid ""
 msgstr ""
 "Project-Id-Version: messages\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-05-14 15:43+0000\n"
-"PO-Revision-Date: 2023-07-25 23:11+0000\n"
-"Last-Translator: Yasser Althuwaini <ymth2000@outlook.com>\n"
+"POT-Creation-Date: 2025-02-03 14:26+0000\n"
+"PO-Revision-Date: 2024-07-25 18:54+0000\n"
+"Last-Translator: jenny :3 <jennykyriakos@gmail.com>\n"
 "Language-Team: Arabeyes <doc@arabeyes.org>\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
@@ -23,8 +23,11 @@ msgstr ""
 "Generated-By: Babel 2.2.0\n"
 "X-Generator: Pontoon\n"
 
-msgid "Email address"
+msgid "Mozilla Add-ons: {} [{}]"
 msgstr ""
+
+msgid "Email address"
+msgstr "عنوان البريد الإلكتروني"
 
 msgid "Invalid email provided."
 msgstr ""
@@ -35,25 +38,16 @@ msgstr ""
 msgid "Please explain why you believe that this decision was made in error, and/or does not align with the applicable policy or law."
 msgstr ""
 
-msgid "Please ensure this field has no more than {max_length} characters."
-msgstr "من فضلك تحقّق من عدد الأحرف في الحقل، يجب ألا يزيد عن {max_length}."
-
-msgid "Invalid value"
+msgid "User profile"
 msgstr ""
 
 msgid "\"{}\" for {}"
 msgstr ""
 
-msgid "User profile"
-msgstr ""
+msgid "Please ensure this field has no more than {max_length} characters."
+msgstr "من فضلك تحقّق من عدد الأحرف في الحقل، يجب ألا يزيد عن {max_length}."
 
-msgid "Collection"
-msgstr ""
-
-msgid "Rating"
-msgstr "التقييم"
-
-msgid "Mozilla Add-ons: {} [{}]"
+msgid "Invalid value"
 msgstr ""
 
 msgid "Appeal reviewer decision"
@@ -78,6 +72,9 @@ msgstr ""
 msgid "Because the decision you are appealing has already been overturned, your appeal will not be processed."
 msgstr ""
 
+msgid "The decision you are appealing has already been overridden by a new decision, so this decision can't be appealed."
+msgstr ""
+
 msgid "This decision can't be appealed."
 msgstr ""
 
@@ -92,8 +89,8 @@ msgid ""
 "\n"
 "Thank you for your report about %(name)s on Mozilla Add-ons, and for providing more information about your concerns.\n"
 "\n"
-"After reviewing your appeal, we determined that the previous decision, that this content does not violate Mozilla’s policies (%(policy_document_url)s), was correct. Based on that determination, we "
-"have denied your appeal, and will not take any action against the account or the content.\n"
+"After reviewing your appeal, we determined that the previous decision, that this content does not violate Mozilla’s policies (%(policy_document_url)s), was correct. Based on that determination, we have denied your appeal, and will not take any action against the account or the content.\n"
+"%(manual_reasoning_text)s.\n"
 "\n"
 "Thank you for your attention.\n"
 msgstr ""
@@ -103,8 +100,7 @@ msgid ""
 "\n"
 "Thank you for your report about %(name)s on Mozilla Add-ons, and for providing more information about your concerns.\n"
 "\n"
-"After reviewing your appeal, we have determined that our prior decision, that this content does not violate Mozilla's policies (%(policy_document_url)s), was incorrect. Based on that determination, "
-"we have removed the content, and notified the user of our action.\n"
+"After reviewing your appeal, we have determined that our prior decision, that this content does not violate Mozilla's policies (%(policy_document_url)s), was incorrect. Based on that determination, we have removed the content, and notified the user of our action.\n"
 msgstr ""
 
 #, python-format
@@ -112,8 +108,7 @@ msgid ""
 "\n"
 "Thank you for your report about %(name)s on Mozilla Add-ons, and for providing more information about your concerns.\n"
 "\n"
-"After reviewing your appeal, we have determined that our prior decision, that this content does not violate Mozilla's policies (%(policy_document_url)s), was incorrect. Based on that determination, "
-"we have requested the developer make changes. If they do not update their content to correct the violation, we will remove it.\n"
+"After reviewing your appeal, we have determined that our prior decision, that this content does not violate Mozilla's policies (%(policy_document_url)s), was incorrect. Based on that determination, we have requested the developer make changes. If they do not update their content to correct the violation, we will remove it.\n"
 msgstr ""
 
 #, python-format
@@ -143,8 +138,7 @@ msgid ""
 "\n"
 "Thank you for your report about the following add-on on Mozilla Add-ons: %(name)s.\n"
 "\n"
-"We reviewed your report and the content in question, and found that it violates Mozilla's policies (%(policy_document_url)s), and have therefore requested the developer make changes. If they do not "
-"update their content to correct the violation, we will remove it.\n"
+"We reviewed your report and the content in question, and found that it violates Mozilla's policies (%(policy_document_url)s), and have therefore requested the developer make changes. If they do not update their content to correct the violation, we will remove it.\n"
 msgstr ""
 
 #, python-format
@@ -214,10 +208,10 @@ msgstr[5] "الإصدارة {0}"
 msgid "Review note"
 msgstr "مراجعة الملاحظة"
 
-msgid "Only latest versions of addons can have notes added."
-msgstr "لا يمكنك إضافة ملاحظات إصدارات الإضافات إلا للنسخ الأخيرة."
-
 msgid "Request content length is too large."
+msgstr ""
+
+msgid "Add-on uploads are temporarily unavailable."
 msgstr ""
 
 msgid "Maximum number of categories per application ({MAX_CATEGORIES}) exceeded"
@@ -269,9 +263,6 @@ msgid "Listed"
 msgstr "مُدرجة"
 
 msgid "Add-on and collection paths need to end with \"/\""
-msgstr ""
-
-msgid "Previews cannot be created for themes."
 msgstr ""
 
 msgid "Built in licenses can not be updated."
@@ -358,6 +349,9 @@ msgstr ""
 msgid "This type of add-on does not allow custom compatibility."
 msgstr ""
 
+msgid "This endpoint is not valid for Themes."
+msgstr ""
+
 msgid "My Add-ons"
 msgstr "إضافاتي"
 
@@ -418,6 +412,9 @@ msgstr "CIDR"
 msgid "Some features are temporarily disabled while we perform website maintenance. We'll be back to full capacity shortly."
 msgstr "بعض الميزات معطلة مؤقتًا أثناء قيامنا بصيانة موقع الويب. سنعود بكامل طاقتنا قريبًا."
 
+msgid "URLs are not allowed."
+msgstr ""
+
 msgid "Must contain at least one printable character."
 msgstr "يجب أن يحتوي محرف مطبوع واحد أقلّه."
 
@@ -470,8 +467,8 @@ msgid ""
 "<h1>Oops! We had an error.</h1> <p>We'll get to fixing that soon.</p> <p> You can try refreshing the page, or head back to the <a href=\"%(home)s\">Add-ons homepage</a>. You can also help us fix "
 "this by <a href=\"https://github.com/mozilla/addons/issues/new\">filing an issue</a> with the details of how you got to this page. </p>"
 msgstr ""
-"<h1> عفوًا! حدث خطأ. </ h1> <p> سنصلح ذلك قريبًا. </ p> <p> يمكنك تجربة تحديث الصفحة ، أو العودة إلى <a href = \"%(home)s \"> الصفحة الرئيسية للإضافات </a>. يمكنك أيضًا مساعدتنا في حل هذه المشكلة عن "
-"طريق <a href=\"https://github.com/mozilla/addons/issues/new\"> تقديم مشكلة </a> مع تفاصيل كيفية دخولك إلى هذه الصفحة. </p>"
+"<h1> عفوًا! حدث خطأ. </ h1> <p> سنصلح ذلك قريبًا. </ p> <p> يمكنك تجربة تحديث الصفحة ، أو العودة إلى <a href = \"%(home)s \"> الصفحة الرئيسية للإضافات </a>. يمكنك أيضًا مساعدتنا في حل هذه المشكلة عن"
+" طريق <a href=\"https://github.com/mozilla/addons/issues/new\"> تقديم مشكلة </a> مع تفاصيل كيفية دخولك إلى هذه الصفحة. </p>"
 
 msgid "Register or Log in"
 msgstr ""
@@ -502,6 +499,12 @@ msgstr "هذه الميزة مُعطّلة مؤقتا بينما يُصان ال
 
 msgid "Some features on this page are temporarily disabled while we perform website maintenance. Please try again a little later."
 msgstr "بعض الميزات في هذه الصفحة مُعطّلة مؤقتا بينما يُصان الموقع حاليًا. رجاءً حاول مجددا بعد قليل."
+
+msgid "Add-on uploads temporarily disabled"
+msgstr ""
+
+msgid "Add-on uploads have been temporarily disabled. Please check back later."
+msgstr ""
 
 # {0} is the application the user is browsing.  Examples:  Thunderbird, Firefox,
 # Sunbird
@@ -594,6 +597,12 @@ msgstr "هذا الرابط URL المخصص لا يمكن استخدامه."
 msgid "This add-on already belongs to the collection"
 msgstr "هذه الإضافة موجودة في تجميعة من التجميعات بالفعل"
 
+msgid "Blocked"
+msgstr ""
+
+msgid "Restricted"
+msgstr ""
+
 msgid "{addon} was created."
 msgstr "أُنشأت {addon}."
 
@@ -667,12 +676,6 @@ msgstr ""
 msgid "Retained"
 msgstr ""
 
-msgid "{addon} {version} escalated."
-msgstr ""
-
-msgid "Super review requested"
-msgstr ""
-
 msgid "{addon} {version} review requested."
 msgstr ""
 
@@ -685,14 +688,8 @@ msgstr ""
 msgid "More information requested"
 msgstr "طُلبت معلومات أكثر"
 
-msgid "{addon} {version} super review requested."
-msgstr ""
-
 msgid "The add-on has been flagged for Admin Review. It's still in our review queue, but it will need to be checked by one of our admin reviewers. The review might take longer than usual."
 msgstr ""
-
-msgid "Commented"
-msgstr "علّق"
 
 msgid "{tag} added to {addon}."
 msgstr "أُضيف {tag} إلى {addon}."
@@ -708,20 +705,6 @@ msgstr "أُزيلت {addon} من {collection}."
 
 msgid "{rating} for {addon} written."
 msgstr ""
-
-#. L10n: {0} is a category name.
-msgid "{addon} featured in {0}."
-msgstr ""
-
-#. L10n: {0} is a category name.
-msgid "{addon} no longer featured in {0}."
-msgstr "لم يعد {addon} مميزًا في {0}."
-
-msgid "{addon} is now featured."
-msgstr "{addon} مميزة الآن."
-
-msgid "{addon} is no longer featured."
-msgstr "{addon} غير مميزة الآن."
 
 #. L10n: {0} is the application, {1} is the version of the app
 msgid "{0} {1} added."
@@ -772,44 +755,20 @@ msgstr "حُدّث الحساب."
 msgid "Account {user} deleted."
 msgstr "حُدّث الحساب."
 
-msgid "Created: {0}."
-msgstr "أُنشِئ: {0}."
-
-msgid "Edited field: {2} set to: {0}."
-msgstr "تعدّل حقل: ضُبط {2} على: {0}."
-
-msgid "Deleted: {1}."
-msgstr "حُذِف: {1}."
-
 msgid "{rating} for {addon} updated."
 msgstr "تم تحديث {rating} لـ {addon}."
 
 msgid "{addon} reviewed."
 msgstr "جرت مراجعة {addon}."
 
-msgid "User {user} banned."
-msgstr "تم حظر {user}."
-
-msgid "User {user} picture deleted."
-msgstr "تم حذف صورة المستخدم {user}."
-
-msgid "User {user} added to {group}."
-msgstr ""
-
-msgid "User {user} removed from {group}."
-msgstr ""
-
 msgid "{addon} unlisted."
-msgstr ""
-
-msgid "{file} was signed."
 msgstr ""
 
 #. L10n: {0} is the add-on GUID.
 msgid "Add-on id {0} with GUID {1} has been deleted"
 msgstr ""
 
-msgid "{addon} migrated from preliminary."
+msgid "{file} was signed."
 msgstr ""
 
 msgid "Reply by developer on {addon} {version}."
@@ -836,55 +795,17 @@ msgstr "رُفع الكود المصدري للإصدارة {version} من {addo
 msgid "Source code uploaded"
 msgstr "رُفع الكود المصدري"
 
-msgid "{addon} {version} auto-approval confirmed."
-msgstr ""
-
-msgid "Auto-Approval confirmed"
-msgstr "تأكّدت الموافقة الآلية"
-
 msgid "{addon} {version} re-enabled."
 msgstr "تم إعادة تفعيل {addon} {version}."
 
 msgid "{addon} {version} disabled."
 msgstr "تم تعطيل {addon} {version}."
 
-msgid "{addon} {version} content approved."
-msgstr ""
-
-msgid "Content approved"
-msgstr "جرت الموافقة على المحتوى"
-
 msgid "{addon} {version} content rejected."
 msgstr "رُفض محتوى الإصدارة {version} من {addon}."
 
 msgid "Content rejected"
 msgstr "رُفض المحتوى"
-
-msgid "{addon} information request altered or removed by admin."
-msgstr "عدّل المدير طلب المعلومات حول {addon} أو أزاله."
-
-msgid "Information request altered"
-msgstr "تعدّل طلب المعلومات"
-
-msgid "Information request cleared by developer on {addon} {version}."
-msgstr ""
-
-msgid "Information request removed"
-msgstr "أُزيل طلب المعلومات"
-
-msgid "{addon} {version} admin add-on-review requested."
-msgstr ""
-
-#, fuzzy
-msgid "Admin add-on-review requested"
-msgstr "التعليق"
-
-msgid "{addon} {version} admin content-review requested."
-msgstr ""
-
-#, fuzzy
-msgid "Admin content-review requested"
-msgstr "التعليق"
 
 msgid "{addon} {version} admin theme-review requested."
 msgstr ""
@@ -895,46 +816,6 @@ msgstr "التعليق"
 
 msgid "{addon} was migrated from a lightweight theme."
 msgstr ""
-
-msgid "User {user} api key reset."
-msgstr ""
-
-msgid "Block for {0} added to Blocklist."
-msgstr ""
-
-msgid "Block added"
-msgstr "أُضيفت كتلة"
-
-msgid "Block for {0} edited in Blocklist."
-msgstr ""
-
-msgid "Block edited"
-msgstr ""
-
-#, fuzzy
-msgid "Block for {0} deleted from Blocklist."
-msgstr "حُذفت الإصدارة {0} من {addon}."
-
-#, fuzzy
-msgid "Block deleted"
-msgstr "حُذفت الإضافة."
-
-msgid "GUID for {addon} added to DeniedGuid."
-msgstr ""
-
-#, fuzzy
-msgid "GUID for {addon} removed from DeniedGuid."
-msgstr "أُزيلت {addon} من {collection}."
-
-msgid "Block {1} action for {0} signed off."
-msgstr ""
-
-msgid "Block action signoff"
-msgstr ""
-
-#, fuzzy
-msgid "User {user} session(s) reset."
-msgstr "جُرّد {user} من الهوية."
 
 #, fuzzy
 msgid "{addon} {version} content reject scheduled."
@@ -979,24 +860,6 @@ msgstr ""
 msgid "Pending rejection cleared"
 msgstr ""
 
-msgid "{version} added to Blocklist."
-msgstr ""
-
-msgid "Version Blocked"
-msgstr ""
-
-msgid "{version} removed from Blocklist."
-msgstr ""
-
-msgid "Version Unblocked"
-msgstr ""
-
-msgid "{addon} {version} admin add-on-review cleared."
-msgstr ""
-
-msgid "Admin add-on-review cleared"
-msgstr ""
-
 msgid "{user_responsible} changed {addon} slug from {0} to {1}."
 msgstr ""
 
@@ -1012,10 +875,22 @@ msgstr ""
 msgid "Review {rating} for {addon} un-deleted."
 msgstr ""
 
-msgid "User {user} content restored."
+msgid "{addon} {version} rejected automatically after delay expired."
 msgstr ""
 
-msgid "User {user} unbanned."
+msgid "Rejected automatically after delay expired"
+msgstr ""
+
+msgid "{addon} {version} content rejected automatically after delay expired."
+msgstr ""
+
+msgid "Content rejected automatically after delay expired"
+msgstr ""
+
+msgid "{addon} {version} pending rejection changed."
+msgstr ""
+
+msgid "Pending rejection changed"
 msgstr ""
 
 msgid "Firefox"
@@ -1136,14 +1011,6 @@ msgid "Themes"
 msgstr "السِمات"
 
 msgid "Deprecated Site Permissions"
-msgstr ""
-
-msgid "Accessibility"
-msgstr ""
-
-msgid ""
-"Download Firefox accessibility extensions to help you consume content and navigate online in ways that work best for you. Discover extensions that remove or reduce barriers to access by changing "
-"screen brightness, reading web pages aloud, providing precision magnification, and more."
 msgstr ""
 
 msgid "Alerts & Updates"
@@ -1326,25 +1193,32 @@ msgstr "عامة"
 msgid "Mozilla Public License 2.0"
 msgstr ""
 
-msgid "GNU General Public License v2.0"
+msgid "Apache License 2.0"
 msgstr ""
 
-msgid "GNU General Public License v3.0"
+msgid "GNU General Public License v2.0 only"
 msgstr ""
 
-msgid "GNU Library General Public License v2.1"
+msgid "GNU General Public License v3.0 only"
 msgstr ""
 
-msgid "GNU Library General Public License v3.0"
+msgid "GNU Lesser General Public License v2.1 only"
 msgstr ""
 
-#, fuzzy
-msgid "The MIT License"
-msgstr "الرخصة"
+msgid "GNU Lesser General Public License v3.0 only"
+msgstr ""
 
-#, fuzzy
-msgid "The BSD License"
-msgstr "الرخصة"
+msgid "GNU Affero General Public License v3.0 only"
+msgstr ""
+
+msgid "MIT License"
+msgstr ""
+
+msgid "ISC License"
+msgstr ""
+
+msgid "BSD 2-Clause \"Simplified\" License"
+msgstr ""
 
 msgid "Mozilla Public License 1.1"
 msgstr ""
@@ -1370,6 +1244,27 @@ msgstr ""
 msgid "Creative Commons Attribution-ShareAlike 3.0"
 msgstr ""
 
+msgid "Creative Commons Attribution 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-NonCommercial 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-NonCommercial-NoDerivs 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-NonCommercial-Share Alike 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-NoDerivs 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-ShareAlike 4.0"
+msgstr ""
+
+msgid "The Unlicense"
+msgstr ""
+
 #, fuzzy
 msgid "Not Promoted"
 msgstr "بلا تقييم حتى الآن"
@@ -1377,12 +1272,6 @@ msgstr "بلا تقييم حتى الآن"
 #, fuzzy
 msgid "Recommended"
 msgstr "المُقترح ({0})"
-
-msgid "Sponsored"
-msgstr ""
-
-msgid "Verified"
-msgstr ""
 
 #, fuzzy
 msgid "By Firefox"
@@ -1642,6 +1531,41 @@ msgstr ""
 msgid "Display Name"
 msgstr "اسم العرض"
 
+msgid "Confirm email address"
+msgstr ""
+
+msgid "Generate new credentials"
+msgstr ""
+
+msgid "Revoke and regenerate credentials"
+msgstr ""
+
+msgid "Revoke"
+msgstr "اسحب الوصول"
+
+msgid "JWT issuer"
+msgstr ""
+
+msgid ""
+"To make API requests, send a <a href=\"{jwt_url}\">JSON Web Token (JWT)</a> as the authorization header. You'll need to generate a JWT for every request as explained in the <a "
+"href=\"{docs_url}\">API documentation</a>."
+msgstr ""
+
+msgid "JWT secret"
+msgstr ""
+
+msgid "Please click the confirm button below to generate API credentials for user <strong>{name}</strong>."
+msgstr ""
+
+msgid "A confirmation link will be sent to your email address. After confirmation you will find your API keys on this page."
+msgstr ""
+
+msgid "You don't have any API credentials."
+msgstr ""
+
+msgid "Something went wrong, please contact developer support."
+msgstr ""
+
 msgid "Invalid or corrupt add-on file."
 msgstr "ملف إضافة غير صالح أو تالف."
 
@@ -1672,6 +1596,9 @@ msgstr "الإنشاء"
 
 msgid "Downloads"
 msgstr "التنزيلات"
+
+msgid "Rating"
+msgstr "التقييم"
 
 msgid "All My Add-ons"
 msgstr "إضافاتي كلّها"
@@ -1810,6 +1737,9 @@ msgstr ""
 msgid "The highlight color of the active tab. Implemented as a border around the tab on Firefox 89+ and a line above the tab on older Firefoxes. Manifest field:  tab_line."
 msgstr ""
 
+msgid "Add-on uploads are temporarily unavailable"
+msgstr ""
+
 #, fuzzy
 msgid "Review requested."
 msgstr "التعليق"
@@ -1818,6 +1748,9 @@ msgid "You must provide further details to proceed."
 msgstr ""
 
 msgid "Your old credentials were revoked and are no longer valid."
+msgstr ""
+
+msgid "Keep your API keys secret and never share them with anyone, including Mozilla contributors."
 msgstr ""
 
 msgid "New API key created"
@@ -2220,8 +2153,8 @@ msgid "Email"
 msgstr "البريد الإلكتروني"
 
 msgid ""
-"If you wish to display an e-mail address for support inquiries, enter it here. If you have different addresses for each language multiple translations of this field can be added. It is only "
-"relevant for listed add-ons."
+"If you wish to display an e-mail address for support inquiries, enter it here. If you have different addresses for each language multiple translations of this field can be added. It is only relevant"
+" for listed add-ons."
 msgstr ""
 
 msgid "Website"
@@ -2263,8 +2196,8 @@ msgid "Whiteboard"
 msgstr "اللوحة البيضاء"
 
 msgid ""
-"The whiteboard is the place to provide information relevant to your add-on, whatever the version, to the reviewers. Use it to provide ways to test the add-on, and any additional information that "
-"may help. This whiteboard is also editable by reviewers."
+"The whiteboard is the place to provide information relevant to your add-on, whatever the version, to the reviewers. Use it to provide ways to test the add-on, and any additional information that may"
+" help. This whiteboard is also editable by reviewers."
 msgstr ""
 
 msgid "Add-on Media for {0}"
@@ -2695,6 +2628,10 @@ msgid "Source files (aside from open-source third party libraries) cannot be tra
 msgstr ""
 
 #, python-format
+msgid "The maximum file size accepted is %(max_size)s."
+msgstr ""
+
+#, python-format
 msgid "For more information, please read <a %(a_attrs)s>Source Code Submission</a> on Firefox Extension Workshop."
 msgstr ""
 
@@ -2721,6 +2658,10 @@ msgid "Upload Version"
 msgstr "رفع إصدارة جديدة"
 
 msgid "Use the fields below to upload your add-on package. After upload, a series of automated validation tests will be run on your file."
+msgstr ""
+
+#, python-format
+msgid "The maximum file size accepted is %(max_size)s. If your add-on is larger than %(max_size)s, it will fail validation."
 msgstr ""
 
 msgid "Which applications is this version compatible with?"
@@ -2797,47 +2738,6 @@ msgid "API Credentials"
 msgstr "معلومات ولوج API"
 
 #, python-format
-msgid "For detailed instructions, consult the <a href=\"%(docs_url)s\">API documentation</a>."
-msgstr ""
-
-msgid "Keep your API keys secret and <strong>never share them with anyone</strong>, including Mozilla contributors."
-msgstr ""
-
-msgid "JWT issuer"
-msgstr ""
-
-msgid "JWT secret"
-msgstr ""
-
-#, python-format
-msgid ""
-"To make API requests, send a <a href=\"%(jwt_url)s\">JSON Web Token (JWT)</a> as the authorization header. You'll need to generate a JWT for every request as explained in the <a "
-"href=\"%(docs_url)s\">API documentation</a>."
-msgstr ""
-
-#, python-format
-msgid "Please click the confirm button below to generate API credentials for user <strong>%(name)s</strong>."
-msgstr ""
-
-msgid "A confirmation link will be sent to your email address. After confirmation you will find your API keys on this page."
-msgstr ""
-
-msgid "You don't have any API credentials."
-msgstr ""
-
-msgid "Revoke"
-msgstr "اسحب الوصول"
-
-msgid "Revoke and regenerate credentials"
-msgstr ""
-
-msgid "Confirm and generate new credentials"
-msgstr ""
-
-msgid "Generate new credentials"
-msgstr ""
-
-#, python-format
 msgid ""
 "Hello,\n"
 "\n"
@@ -2884,8 +2784,7 @@ msgid ""
 "We noticed that your secret AMO API credentials were included in an add-on submitted to addons.mozilla.org. In order to protect your account and your add-on(s), we revoked the leaked credentials.\n"
 "You can generate new API credentials at %(api_keys_url)s\n"
 "\n"
-"Please make sure you never share your credentials with anyone. Never include them in a public repository, add-on or any other public place. We encourage you to review your code repositories and "
-"your extensions to remove any references to your AMO credentials.\n"
+"Please make sure you never share your credentials with anyone. Never include them in a public repository, add-on or any other public place. We encourage you to review your code repositories and your extensions to remove any references to your AMO credentials.\n"
 "\n"
 "Thank you,\n"
 "The Mozilla Add-ons team"
@@ -3010,8 +2909,8 @@ msgid "Firefox for Android compatibility"
 msgstr ""
 
 msgid ""
-"Did you test your extension to ensure it works as expected on Firefox for Android? If not, please see <a target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://extensionworkshop.com/"
-"documentation/develop/developing-extensions-for-firefox-for-android/\">Developing extensions for Firefox Android</a> for test guidance before submitting."
+"Did you test your extension to ensure it works as expected on Firefox for Android? If not, please see <a target=\"_blank\" rel=\"noopener noreferrer\" "
+"href=\"https://extensionworkshop.com/documentation/develop/developing-extensions-for-firefox-for-android/\">Developing extensions for Firefox Android</a> for test guidance before submitting."
 msgstr ""
 
 msgid "Yes, I’ve tested my extension with Firefox for Android"
@@ -3042,12 +2941,12 @@ msgstr ""
 msgid "Sort by:"
 msgstr "ترتيب حسب:"
 
-#. %s is a list of HTML tags.
+#. %s is a list of markdown syntax.
 #, python-format
-msgid "Allowed HTML: %(allowed_html)s"
+msgid "Allowed Markdown: %(allowed_markdown)s"
 msgstr ""
 
-msgid "Some HTML supported."
+msgid "Some Markdown supported."
 msgstr ""
 
 msgid "Remove this application"
@@ -3163,16 +3062,6 @@ msgstr "برنامج الإمتدادات المُقترحة"
 
 msgid "Contribute"
 msgstr "ساهم"
-
-#, fuzzy
-msgid "Review Add-ons"
-msgstr "تعليق على هذه الإضافة"
-
-msgid "Volunteer reviewers help keep add-ons safe and reliable to use. They enjoy great perks too!"
-msgstr ""
-
-msgid "Join us!"
-msgstr "انضم إلينا!"
 
 msgid "Write Some Code"
 msgstr ""
@@ -4306,10 +4195,6 @@ msgid "Double-click any word to instantly see its definition."
 msgstr ""
 
 #. editorial content for the discovery pane.
-msgid "Blues & Yellows"
-msgstr ""
-
-#. editorial content for the discovery pane.
 #. editorial content for the primary hero shelves.
 msgid "Save batches of tabs as convenient bookmarks."
 msgstr ""
@@ -4369,6 +4254,10 @@ msgstr ""
 
 #. editorial content for the discovery pane.
 msgid "Change the way the web looks."
+msgstr ""
+
+#. editorial content for the discovery pane.
+msgid "Customize YouTube to taste. Give it a new look, new features & filter only the content you want."
 msgstr ""
 
 #. editorial content for the primary hero shelves.
@@ -4523,6 +4412,10 @@ msgstr ""
 msgid "Block time-wasting websites. Block them completely or just during time frames of your choosing."
 msgstr ""
 
+#. editorial content for the primary hero shelves.
+msgid "Easily summarize emails, docs, articles, and video transcripts in English across the web — without sacrificing your privacy."
+msgstr ""
+
 #. editorial content for the secondary hero shelves.
 msgid "Extensions are like apps for Firefox."
 msgstr "تُشبه الامتدادات التطبيقات، ولكنّها لمتصفّح فيرفُكس."
@@ -4536,15 +4429,16 @@ msgid "See all extensions"
 msgstr "تصفح كل الإضافات"
 
 #. editorial content for the secondary hero shelves.
-msgid "Port Authority (Developer Spotlight)"
-msgstr ""
-
-#. editorial content for the secondary hero shelves.
 msgid "Privacy & Security extensions"
 msgstr ""
 
 #. editorial content for the secondary hero shelves.
-msgid "Fantastic tab managers"
+#. editorial content for the homepage shelves.
+msgid "Tab managers"
+msgstr ""
+
+#. editorial content for the secondary hero shelves.
+msgid "Spotlight: Adaptive Tab Bar Color"
 msgstr ""
 
 #. editorial content for the secondary hero shelves.
@@ -4628,10 +4522,6 @@ msgstr "شبكات اجتماعية"
 #, fuzzy
 msgid "See more social streaming staff picks"
 msgstr "تصفح كل الإضافات"
-
-#. editorial content for the homepage shelves.
-msgid "Tab managers"
-msgstr ""
 
 #. editorial content for the homepage shelves.
 #, fuzzy
@@ -4730,6 +4620,22 @@ msgstr ""
 msgid "See more download manager staff picks"
 msgstr ""
 
+#. editorial content for the homepage shelves.
+msgid "Accessibility extensions"
+msgstr ""
+
+#. editorial content for the homepage shelves.
+msgid "See more accessibility staff picks"
+msgstr ""
+
+#. editorial content for the homepage shelves.
+msgid "Extension starter pack"
+msgstr ""
+
+#. editorial content for the homepage shelves.
+msgid "See more starter extension staff picks"
+msgstr ""
+
 msgid "Unreviewed"
 msgstr ""
 
@@ -4743,10 +4649,7 @@ msgstr ""
 msgid "Could not parse the manifest file."
 msgstr ""
 
-msgid "Add-on ID is required for Firefox 47 and below."
-msgstr "مطلوب الرقم المُعرّف للإضافة لفيرفكس 47 وما دونه."
-
-msgid "Lowest supported \"strict_min_version\" is 42.0."
+msgid "Lowest supported \"strict_min_version\" is {min_version}."
 msgstr ""
 
 msgid "Unknown \"strict_min_version\" {appver} for {app}"
@@ -4915,6 +4818,12 @@ msgstr "مقيمة بـ {0} من 5 نجوم"
 #, python-format
 msgid "Rated %(rating)s out of 5 stars"
 msgstr "مقيمة بـ %(rating)s من 5 نجوم"
+
+msgid "Unsupported file type, please upload a file {extensions}."
+msgstr ""
+
+msgid "File too large."
+msgstr ""
 
 #, python-format
 msgid "<dd>%(review_author)s</dd>"
@@ -5360,8 +5269,8 @@ msgid ""
 msgstr ""
 
 msgid ""
-"Before starting, please read and accept our Firefox Add-on Distribution Agreement as well as our Review Policies and Rules. The Firefox Add-on Distribution Agreement also links to our Privacy "
-"Notice which explains how we handle your information."
+"Before starting, please read and accept our Firefox Add-on Distribution Agreement as well as our Review Policies and Rules. The Firefox Add-on Distribution Agreement also links to our Privacy Notice"
+" which explains how we handle your information."
 msgstr ""
 
 msgid "Please read and accept our Firefox Add-on Distribution Agreement as well as our Review Policies and Rules by visiting {url}"
@@ -5419,8 +5328,7 @@ msgstr ""
 msgid ""
 "Greetings %(author_name)s,\n"
 "\n"
-"You have been invited to become an author of %(addon_name)s on %(domain)s. Accepting the invitation will give you access to edit the add-on, and may show your name in the authors list on the "
-"website.\n"
+"You have been invited to become an author of %(addon_name)s on %(domain)s. Accepting the invitation will give you access to edit the add-on, and may show your name in the authors list on the website.\n"
 "\n"
 "Click on the link below to respond if you want to be added as an author for %(addon_name)s.\n"
 "\n"

@@ -4,22 +4,29 @@ from datetime import datetime, timedelta
 from unittest import mock
 
 from django.conf import settings
+from django.core.files.base import ContentFile
 from django.test.utils import override_settings
 
 from rest_framework.exceptions import ErrorDetail
 from rest_framework.test import APIRequestFactory
 
 from olympia import amo
-from olympia.activity.models import GENERIC_USER_NAME, ActivityLog, ActivityLogToken
+from olympia.activity.models import (
+    GENERIC_USER_NAME,
+    ActivityLog,
+    ActivityLogToken,
+    AddonLog,
+    AttachmentLog,
+)
 from olympia.activity.tests.test_serializers import LogMixin
 from olympia.activity.tests.test_utils import sample_message_content
 from olympia.activity.views import InboundEmailIPPermission, inbound_email
 from olympia.addons.models import (
     AddonRegionalRestrictions,
-    AddonReviewerFlags,
     AddonUser,
 )
 from olympia.addons.utils import generate_addon_guid
+from olympia.amo.reverse import reverse
 from olympia.amo.tests import (
     APITestClientSessionID,
     TestCase,
@@ -143,15 +150,22 @@ class ReviewNotesViewSetDetailMixin(LogMixin):
         self.version.delete()
 
         # There was a listed version, it has been deleted but still, it was
-        # there, so listed reviewers should still be able to access.
+        # there, so listed reviewers should still be able to access if they
+        # have Addons:ViewDeleted
         self._login_reviewer()
+        response = self.client.get(self.url)
+        assert response.status_code == 404
+
+        user = UserProfile.objects.get(username='reviewer')
+        self.grant_permission(user, 'Addons:ViewDeleted')
         response = self.client.get(self.url)
         assert response.status_code == 200
 
     def test_deleted_version_developer(self):
         self.version.delete()
         self._login_developer()
-        self._test_url()
+        response = self.client.get(self.url)
+        assert response.status_code == 404
 
     def test_get_version_not_found(self):
         self._login_reviewer(permission='*:*')
@@ -288,7 +302,7 @@ class TestReviewNotesViewSetList(ReviewNotesViewSetDetailMixin, TestCase):
             'fiiiine', amo.LOG.REVIEWER_REPLY_VERSION, self.days_ago(0)
         )
         self._login_developer()
-        with self.assertNumQueries(17):
+        with self.assertNumQueries(16):
             # - 2 savepoints because of tests
             # - 2 user and groups
             # - 2 addon and its translations
@@ -301,8 +315,7 @@ class TestReviewNotesViewSetList(ReviewNotesViewSetDetailMixin, TestCase):
             #   enough yet to pass that to the activity log queryset, it's
             #   difficult since it's not a FK)
             # - 2 version and its translations (same issue)
-            # - 2 for highlighting (repeats the query to fetch the activity log
-            #   per version)
+            # - 1 for highlighting "pending" activities
             response = self.client.get(self.url)
             assert response.status_code == 200
 
@@ -355,6 +368,7 @@ class TestReviewNotesViewSetCreate(TestCase):
             'version-reviewnotes-list',
             kwargs={'addon_pk': self.addon.pk, 'version_pk': self.version.pk},
         )
+        user_factory(id=settings.TASK_USER_ID)
 
     def _post_reply(self):
         return self.client.post(self.url, {'comments': 'comménty McCómm€nt'})
@@ -399,11 +413,19 @@ class TestReviewNotesViewSetCreate(TestCase):
         }
 
     def _test_developer_reply(self):
-        user_factory(id=settings.TASK_USER_ID)
+        expected_reason = (
+            self.version.needshumanreview_set.model.REASONS.DEVELOPER_REPLY
+        )
         self.user = user_factory()
         self.user.addonuser_set.create(addon=self.addon)
         self.client.login_api(self.user)
         assert not self.get_review_activity_queryset().exists()
+        assert (
+            self.version.needshumanreview_set.filter(
+                reason=expected_reason, is_active=True
+            ).count()
+            == 0
+        )
 
         response = self._post_reply()
         assert response.status_code == 201
@@ -423,10 +445,11 @@ class TestReviewNotesViewSetCreate(TestCase):
 
         # Version was set as needing human review for a developer reply.
         self.version.reload()
-        assert self.version.needshumanreview_set.filter(is_active=True).count() == 1
         assert (
-            self.version.needshumanreview_set.get().reason
-            == self.version.needshumanreview_set.model.REASONS.DEVELOPER_REPLY
+            self.version.needshumanreview_set.filter(
+                reason=expected_reason, is_active=True
+            ).count()
+            == 1
         )
 
     def test_developer_reply_listed(self):
@@ -445,7 +468,7 @@ class TestReviewNotesViewSetCreate(TestCase):
         )
 
     def test_developer_reply_due_date_already_set(self):
-        AddonReviewerFlags.objects.create(addon=self.addon, auto_approval_disabled=True)
+        self.version.needshumanreview_set.create()  # To force it to have a due date
         expected_due_date = datetime.now() + timedelta(days=1)
         self.version.file.update(status=amo.STATUS_AWAITING_REVIEW)
         self.version.update(due_date=expected_due_date)
@@ -496,7 +519,7 @@ class TestReviewNotesViewSetCreate(TestCase):
         assert response.status_code == 404
         assert not self.get_review_activity_queryset().exists()
 
-    def test_reply_to_deleted_version_is_400(self):
+    def test_reply_to_deleted_version_is_404(self):
         old_version = self.addon.find_latest_version(channel=amo.CHANNEL_LISTED)
         new_version = version_factory(addon=self.addon)
         old_version.delete()
@@ -509,10 +532,10 @@ class TestReviewNotesViewSetCreate(TestCase):
         self.grant_permission(self.user, 'Addons:Review')
         self.client.login_api(self.user)
         response = self._post_reply()
-        assert response.status_code == 400
+        assert response.status_code == 404
         assert not self.get_review_activity_queryset().exists()
 
-    def test_cant_reply_to_old_version(self):
+    def test_can_reply_to_old_version(self):
         old_version = self.addon.find_latest_version(channel=amo.CHANNEL_LISTED)
         old_version.update(created=self.days_ago(1))
         new_version = version_factory(addon=self.addon)
@@ -530,10 +553,10 @@ class TestReviewNotesViewSetCreate(TestCase):
         assert response.status_code == 201
         assert self.get_review_activity_queryset().count() == 1
 
-        # The check we can't reply to the old version
+        # The check we can reply to the old version
         response = self._post_reply()
-        assert response.status_code == 400
-        assert self.get_review_activity_queryset().count() == 1
+        assert response.status_code == 201
+        assert self.get_review_activity_queryset().count() == 2
 
     def test_developer_can_reply_to_disabled_version(self):
         self.version.file.update(status=amo.STATUS_DISABLED)
@@ -660,3 +683,41 @@ class TestEmailApi(TestCase):
         res = inbound_email(req)
         assert not _mock.called
         assert res.status_code == 403
+
+
+class TestDownloadAttachment(TestCase):
+    def setUp(self):
+        super().setUp()
+        self.addon = addon_factory(
+            guid=generate_addon_guid(), name='My Addôn', slug='my-addon'
+        )
+        self.user = user_factory(email='admin@mozilla.com')
+        self.log = ActivityLog.objects.create(
+            user=self.user, action=amo.LOG.REVIEWER_REPLY_VERSION
+        )
+        self.attachment = AttachmentLog.objects.create(
+            activity_log=self.log,
+            file=ContentFile('Pseudo File', name='attachment.txt'),
+        )
+        AddonLog.objects.create(addon=self.addon, activity_log=self.log)
+
+    def test_download_attachment_developer(self):
+        self.client.force_login(self.user)
+        url = reverse('activity.attachment', args=[self.log.pk])
+        response = self.client.get(url, follow=True)
+        self.assertEqual(response.status_code, 404)
+        response = self.client.get(url, follow=True)
+        self.addon.authors.add(self.user)
+        response = self.client.get(url, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('.txt', response['Content-Disposition'])
+
+    def test_download_attachment_reviewer(self):
+        self.client.force_login(self.user)
+        url = reverse('activity.attachment', args=[self.log.pk])
+        response = self.client.get(url, follow=True)
+        self.assertEqual(response.status_code, 404)
+        self.grant_permission(self.user, 'Addons:Review', 'Addon Reviewers')
+        response = self.client.get(url, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('.txt', response['Content-Disposition'])

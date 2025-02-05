@@ -1,7 +1,9 @@
 import json
+import os
 import uuid
 from collections import defaultdict
 from copy import copy
+from datetime import date, datetime
 from inspect import isclass
 
 from django.apps import apps
@@ -15,10 +17,12 @@ from django.utils.translation import gettext, ngettext
 
 import olympia.core.logger
 from olympia import amo, constants
+from olympia.abuse.models import CinderPolicy, ContentDecision
 from olympia.access.models import Group
 from olympia.addons.models import Addon
 from olympia.amo.fields import IPAddressBinaryField, PositiveAutoField
 from olympia.amo.models import BaseQuerySet, LongNameIndex, ManagerBase, ModelBase
+from olympia.amo.utils import SafeStorage, id_to_path
 from olympia.bandwagon.models import Collection
 from olympia.blocklist.models import Block
 from olympia.constants.activity import _LOG
@@ -36,6 +40,32 @@ log = olympia.core.logger.getLogger('z.amo.activity')
 MAX_TOKEN_USE_COUNT = 100
 
 GENERIC_USER_NAME = gettext('Add-ons Review Team')
+
+# Activity ids that are not considered as needing a reply from developers, so
+# they are never considered "pending".
+NOT_PENDING_IDS = (
+    amo.LOG.DEVELOPER_REPLY_VERSION.id,
+    amo.LOG.APPROVE_VERSION.id,
+    amo.LOG.REJECT_VERSION.id,
+    amo.LOG.PRELIMINARY_VERSION.id,
+    amo.LOG.PRELIMINARY_ADDON_MIGRATED.id,
+    amo.LOG.NOTES_FOR_REVIEWERS_CHANGED.id,
+    amo.LOG.SOURCE_CODE_UPLOADED.id,
+)
+
+
+def attachment_upload_path(instance, filename):
+    ext = os.path.splitext(filename)[1]
+    timestamp = datetime.now().replace(microsecond=0)
+    return os.path.join(
+        'activity_attachment',
+        id_to_path(instance.activity_log.pk, breadth=1),
+        f'{timestamp}{ext}',
+    )
+
+
+def activity_attachment_storage():
+    return SafeStorage(root_setting='MEDIA_ROOT')
 
 
 class GenericMozillaUser(UserProfile):
@@ -70,13 +100,7 @@ class ActivityLogToken(ModelBase):
         return self.use_count >= MAX_TOKEN_USE_COUNT
 
     def is_valid(self):
-        return (
-            not self.is_expired()
-            and self.version
-            == self.version.addon.find_latest_version(
-                channel=self.version.channel, exclude=()
-            )
-        )
+        return not self.is_expired() and self.version
 
     def expire(self):
         self.update(use_count=MAX_TOKEN_USE_COUNT)
@@ -171,6 +195,32 @@ class ReviewActionReasonLog(ModelBase):
         ordering = ('-created',)
 
 
+class CinderPolicyLog(ModelBase):
+    """
+    This table allows CinderPolicy instances to be assigned to ActivityLog entries.
+    """
+
+    activity_log = models.ForeignKey('ActivityLog', on_delete=models.CASCADE)
+    cinder_policy = models.ForeignKey(CinderPolicy, on_delete=models.CASCADE)
+
+    class Meta:
+        db_table = 'log_activity_cinder_policy'
+        ordering = ('-created',)
+
+
+class ContentDecisionLog(ModelBase):
+    """
+    This table allows ContentDecision instances to be assigned to ActivityLog entries.
+    """
+
+    activity_log = models.ForeignKey('ActivityLog', on_delete=models.CASCADE)
+    decision = models.ForeignKey(ContentDecision, on_delete=models.CASCADE)
+
+    class Meta:
+        db_table = 'log_activity_content_decision'
+        ordering = ('-created',)
+
+
 class GroupLog(ModelBase):
     """
     This table is for indexing the activity log by access group.
@@ -248,6 +298,24 @@ class RatingLog(ModelBase):
         ordering = ('-created',)
 
 
+class AttachmentLog(ModelBase):
+    """
+    This table is for indexing the activity log by attachment.
+    """
+
+    activity_log = models.OneToOneField('ActivityLog', on_delete=models.CASCADE)
+    file = models.FileField(
+        upload_to=attachment_upload_path,
+        storage=activity_attachment_storage,
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        db_table = 'log_activity_attachment'
+        ordering = ('-created',)
+
+
 class DraftComment(ModelBase):
     """A model that allows us to draft comments for reviews before we have
     an ActivityLog instance ready.
@@ -269,6 +337,38 @@ class DraftComment(ModelBase):
 class ActivityLogQuerySet(BaseQuerySet):
     def default_transformer(self, logs):
         ActivityLog.arguments_builder(logs)
+
+    def pending_for_developer(self, for_version=None):
+        """Return ActivityLog that are considered "pending" for developers.
+
+        An Activity will be considered "pending" if it's a review queue
+        activity not hidden to developers that is more recent that the latest
+        activity created by a developer/reviewer. Said differently: if a
+        developer doesn't do something after a reviewer action, that reviewer
+        action will be considered pending."""
+        if for_version is None:
+            for_version = models.OuterRef('versionlog__version_id')
+        latest_reply_date = models.functions.Coalesce(
+            models.Subquery(
+                self.filter(
+                    action__in=NOT_PENDING_IDS,
+                    versionlog__version=for_version,
+                )
+                .values('created')
+                .order_by('-created')[:1]
+            ),
+            date.min,
+        )
+        return (
+            # The subquery needs to run on the already filterd activities we
+            # care about (it uses `self`, i.e. the current state of the
+            # queryset), so we need to filter by action first, then trigger the
+            # subquery, then filter by the result, we can't group all of that
+            # in a single filter() call.
+            self.filter(action__in=amo.LOG_REVIEW_QUEUE_DEVELOPER)
+            .annotate(latest_reply_date=latest_reply_date)
+            .filter(created__gt=models.F('latest_reply_date'))
+        )
 
 
 class ActivityLogManager(ManagerBase):
@@ -387,6 +487,14 @@ class ActivityLogManager(ManagerBase):
             elif class_ == ReviewActionReason:
                 bulk_objects[ReviewActionReasonLog].append(
                     ReviewActionReasonLog(reason_id=id_, **create_kwargs)
+                )
+            elif class_ == CinderPolicy:
+                bulk_objects[CinderPolicyLog].append(
+                    CinderPolicyLog(cinder_policy_id=id_, **create_kwargs)
+                )
+            elif class_ == ContentDecision:
+                bulk_objects[ContentDecisionLog].append(
+                    ContentDecisionLog(decision_id=id_, **create_kwargs)
                 )
             elif class_ == Rating:
                 bulk_objects[RatingLog].append(

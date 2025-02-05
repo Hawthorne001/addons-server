@@ -1,6 +1,8 @@
+import functools
+import operator
 from collections import OrderedDict
 from datetime import date, datetime
-from urllib.parse import quote
+from urllib.parse import urljoin
 
 from django import http
 from django.conf import settings
@@ -16,26 +18,17 @@ from django.urls import reverse
 from django.utils.cache import patch_cache_control
 from django.views.decorators.cache import never_cache
 
-import pygit2
-from csp.decorators import csp as set_csp
 from rest_framework import status
 from rest_framework.decorators import action as drf_action
-from rest_framework.exceptions import NotFound
-from rest_framework.mixins import (
-    CreateModelMixin,
-    DestroyModelMixin,
-    ListModelMixin,
-    RetrieveModelMixin,
-    UpdateModelMixin,
-)
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 import olympia.core.logger
 from olympia import amo
-from olympia.abuse.models import AbuseReport
+from olympia.abuse.models import AbuseReport, CinderJob, CinderPolicy, ContentDecision
+from olympia.abuse.tasks import handle_escalate_action
 from olympia.access import acl
-from olympia.activity.models import ActivityLog, CommentLog, DraftComment
+from olympia.activity.models import ActivityLog, CommentLog
 from olympia.addons.models import (
     Addon,
     AddonApprovalsCounter,
@@ -50,13 +43,16 @@ from olympia.amo.decorators import (
 )
 from olympia.amo.templatetags.jinja_helpers import numberfmt
 from olympia.amo.utils import paginate
+from olympia.api.authentication import (
+    JWTKeyAuthentication,
+    SessionIDAuthentication,
+)
 from olympia.api.permissions import (
     AllowAnyKindOfReviewer,
-    AllowListedViewerOrReviewer,
     AllowUnlistedViewerOrReviewer,
-    AnyOf,
     GroupPermission,
 )
+from olympia.constants.abuse import DECISION_ACTIONS
 from olympia.constants.reviewers import (
     REVIEWS_PER_PAGE,
     REVIEWS_PER_PAGE_MAX,
@@ -65,16 +61,34 @@ from olympia.constants.reviewers import (
 from olympia.devhub import tasks as devhub_tasks
 from olympia.files.models import File
 from olympia.ratings.models import Rating, RatingFlag
-from olympia.reviewers.forms import (
+from olympia.scanners.admin import formatted_matched_rules_with_files_and_data
+from olympia.stats.decorators import bigquery_api_view
+from olympia.stats.utils import (
+    VERSION_ADU_LIMIT,
+    get_average_daily_users_per_version_from_bigquery,
+)
+from olympia.users.models import UserProfile
+from olympia.versions.models import Version
+from olympia.zadmin.models import get_config, set_config
+
+from .decorators import (
+    any_reviewer_or_moderator_required,
+    any_reviewer_required,
+    permission_or_tools_listed_view_required,
+    reviewer_addon_view_factory,
+)
+from .forms import (
+    HeldDecisionReviewForm,
     MOTDForm,
     PublicWhiteboardForm,
     RatingFlagFormSet,
     RatingModerationLogForm,
     ReviewForm,
     ReviewLogForm,
+    ReviewQueueFilter,
     WhiteboardForm,
 )
-from olympia.reviewers.models import (
+from .models import (
     AutoApprovalSummary,
     NeedsHumanReview,
     ReviewerSubscription,
@@ -85,43 +99,20 @@ from olympia.reviewers.models import (
     get_reviewing_cache_key,
     set_reviewing_cache,
 )
-from olympia.reviewers.serializers import (
-    AddonBrowseVersionSerializer,
-    AddonBrowseVersionSerializerFileOnly,
-    AddonCompareVersionSerializer,
-    AddonCompareVersionSerializerFileOnly,
+from .serializers import (
     AddonReviewerFlagsSerializer,
-    DiffableVersionSerializer,
-    DraftCommentSerializer,
-    FileInfoSerializer,
 )
-from olympia.reviewers.utils import (
+from .templatetags.jinja_helpers import to_dom_id
+from .utils import (
     ContentReviewTable,
+    HeldDecisionQueueTable,
     MadReviewTable,
     ModerationQueueTable,
-    NewThemesQueueTable,
     PendingManualApprovalQueueTable,
     PendingRejectionTable,
     ReviewHelper,
-    UpdatedThemesQueueTable,
+    ThemesQueueTable,
 )
-from olympia.scanners.admin import formatted_matched_rules_with_files_and_data
-from olympia.stats.decorators import bigquery_api_view
-from olympia.stats.utils import (
-    VERSION_ADU_LIMIT,
-    get_average_daily_users_per_version_from_bigquery,
-)
-from olympia.users.models import UserProfile
-from olympia.versions.models import Version, VersionReviewerFlags
-from olympia.zadmin.models import get_config, set_config
-
-from .decorators import (
-    any_reviewer_or_moderator_required,
-    any_reviewer_required,
-    permission_or_tools_listed_view_required,
-    reviewer_addon_view_factory,
-)
-from .templatetags.jinja_helpers import to_dom_id
 
 
 def context(**kw):
@@ -195,12 +186,16 @@ def dashboard(request):
     view_all = any(
         acl.action_allowed_for(request.user, perm) for perm in view_all_permissions
     )
-    queue_counts = fetch_queue_counts(request)
+    queue_counts = {
+        queue.name: queue.get_queryset(request).optimized_count()
+        for queue in reviewer_tables_registry.values()
+        if queue.show_count_in_dashboard
+    }
 
     if view_all or acl.action_allowed_for(request.user, amo.permissions.ADDONS_REVIEW):
         sections['Manual Review'] = [
             (
-                'Manual Review ({0})'.format(queue_counts['extension']),
+                'Manual Review ({0})'.format(queue_counts['queue_extension']),
                 reverse('reviewers.queue_extension'),
             ),
             ('Review Log', reverse('reviewers.reviewlog')),
@@ -220,7 +215,7 @@ def dashboard(request):
     ):
         sections['Content Review'] = [
             (
-                'Content Review ({0})'.format(queue_counts['content_review']),
+                'Content Review ({0})'.format(queue_counts['queue_content_review']),
                 reverse('reviewers.queue_content_review'),
             ),
         ]
@@ -229,12 +224,8 @@ def dashboard(request):
     ):
         sections['Themes'] = [
             (
-                'New ({0})'.format(queue_counts['theme_nominated']),
-                reverse('reviewers.queue_theme_nominated'),
-            ),
-            (
-                'Updates ({0})'.format(queue_counts['theme_pending']),
-                reverse('reviewers.queue_theme_pending'),
+                'Awaiting Review ({0})'.format(queue_counts['queue_theme']),
+                reverse('reviewers.queue_theme'),
             ),
             (
                 'Review Log',
@@ -250,7 +241,9 @@ def dashboard(request):
     ):
         sections['User Ratings Moderation'] = [
             (
-                'Ratings Awaiting Moderation ({0})'.format(queue_counts['moderated']),
+                'Ratings Awaiting Moderation ({0})'.format(
+                    queue_counts['queue_moderated']
+                ),
                 reverse('reviewers.queue_moderated'),
             ),
             (
@@ -275,10 +268,16 @@ def dashboard(request):
         sections['Admin Tools'] = [
             (
                 'Add-ons Pending Rejection ({0})'.format(
-                    queue_counts['pending_rejection']
+                    queue_counts['queue_pending_rejection']
                 ),
                 reverse('reviewers.queue_pending_rejection'),
-            )
+            ),
+            (
+                'Held Decisions for 2nd Level Approval ({0})'.format(
+                    queue_counts['queue_decisions']
+                ),
+                reverse('reviewers.queue_decisions'),
+            ),
         ]
     return TemplateResponse(
         request,
@@ -323,6 +322,14 @@ def queue(request, tab):
             order_by = TableObj.default_order_by()
         if order_by is not None:
             params['order_by'] = order_by
+        filter_form = ReviewQueueFilter(
+            request.GET if 'due_date_reasons' in request.GET else None
+        )
+        if filter_form.is_valid() and (
+            due_date_reasons := filter_form.cleaned_data['due_date_reasons']
+        ):
+            filters = [Q(**{reason: True}) for reason in due_date_reasons]
+            qs = qs.filter(functools.reduce(operator.or_, filters))
         table = TableObj(data=qs, **params)
         per_page = request.GET.get('per_page', REVIEWS_PER_PAGE)
         try:
@@ -331,53 +338,30 @@ def queue(request, tab):
             per_page = REVIEWS_PER_PAGE
         if per_page <= 0 or per_page > REVIEWS_PER_PAGE_MAX:
             per_page = REVIEWS_PER_PAGE
-        count = construct_count_queryset_from_queryset(qs)()
-        page = paginate(request, table.rows, per_page=per_page, count=count)
+        page = paginate(
+            request, table.rows, per_page=per_page, count=qs.optimized_count()
+        )
 
         return TemplateResponse(
             request,
             'reviewers/queue.html',
             context=context(
-                table=table,
                 page=page,
-                tab=tab,
-                title=TableObj.title,
                 registry=reviewer_tables_registry,
+                filter_form=filter_form,
+                tab=tab,
+                table=table,
+                title=TableObj.title,
             ),
         )
 
     return _queue(request, tab)
 
 
-def construct_count_queryset_from_queryset(qs):
-    # Some of our querysets can have distinct, which causes django to run
-    # the full select in a subquery and then count() on it. That's tracked
-    # in https://code.djangoproject.com/ticket/30685
-    # We can't easily fix the fact that there is a subquery, but we can
-    # avoid selecting all fields and ordering needlessly.
-    return qs.values('pk').order_by().count
-
-
-def fetch_queue_counts(request):
-    def count_from_registered_table(table, *, request):
-        return construct_count_queryset_from_queryset(table.get_queryset(request))
-
-    counts = {
-        key: count_from_registered_table(table, request=request)
-        for key, table in reviewer_tables_registry.items()
-        if table.show_count_in_dashboard
-    }
-
-    counts['moderated'] = construct_count_queryset_from_queryset(
-        Rating.objects.all().to_moderate()
-    )
-    return {queue: count() for (queue, count) in counts.items()}
-
-
 @permission_or_tools_listed_view_required(amo.permissions.RATINGS_MODERATE)
 def queue_moderated(request, tab):
     TableObj = reviewer_tables_registry[tab]
-    qs = Rating.objects.all().to_moderate().order_by('ratingflag__created')
+    qs = TableObj.get_queryset(request)
     page = paginate(request, qs, per_page=20)
 
     flags = dict(RatingFlag.FLAGS)
@@ -414,13 +398,16 @@ def queue_moderated(request, tab):
 
 
 reviewer_tables_registry = {
-    'extension': PendingManualApprovalQueueTable,
-    'theme_pending': UpdatedThemesQueueTable,
-    'theme_nominated': NewThemesQueueTable,
-    'content_review': ContentReviewTable,
-    'mad': MadReviewTable,
-    'pending_rejection': PendingRejectionTable,
-    'moderated': ModerationQueueTable,
+    table.name: table
+    for table in (
+        PendingManualApprovalQueueTable,
+        MadReviewTable,
+        ThemesQueueTable,
+        ModerationQueueTable,
+        ContentReviewTable,
+        PendingRejectionTable,
+        HeldDecisionQueueTable,
+    )
 }
 
 
@@ -517,7 +504,9 @@ def review(request, addon, channel=None):
         human_review=True,
     )
     form = ReviewForm(
-        request.POST if request.method == 'POST' else None, helper=form_helper
+        request.POST if request.method == 'POST' else None,
+        request.FILES if request.method == 'POST' else None,
+        helper=form_helper,
     )
 
     reports = Paginator(AbuseReport.objects.for_addon(addon), 5).page(1)
@@ -530,7 +519,7 @@ def review(request, addon, channel=None):
         5,
     ).page(1)
     if channel == amo.CHANNEL_LISTED and is_static_theme:
-        redirect_url = reverse(f'reviewers.queue_{form.helper.handler.review_type}')
+        redirect_url = reverse('reviewers.queue_theme')
     else:
         channel_arg = (
             amo.CHANNEL_CHOICES_API.get(channel) if not content_review else 'content'
@@ -593,7 +582,11 @@ def review(request, addon, channel=None):
     # The actions for which we should display the reason select field.
     actions_reasons = []
     # The actions for which we should display the resolve abuse reports checkbox
-    actions_resolves_abuse_reports = []
+    actions_resolves_cinder_jobs = []
+    # The actions for which we should display the cinder policy select field.
+    actions_policies = []
+    # The actions for which to allow attachments.
+    actions_attachments = []
 
     for key, action in actions:
         if not (is_static_theme or action.get('minimal')):
@@ -604,8 +597,12 @@ def review(request, addon, channel=None):
             actions_delayable.append(key)
         if action.get('allows_reasons', False):
             actions_reasons.append(key)
-        if action.get('resolves_abuse_reports', False):
-            actions_resolves_abuse_reports.append(key)
+        if action.get('requires_policies', False):
+            actions_policies.append(key)
+        if action.get('resolves_cinder_jobs', False):
+            actions_resolves_cinder_jobs.append(key)
+        if action.get('can_attach', True):
+            actions_attachments.append(key)
 
     addons_sharing_same_guid = (
         Addon.unfiltered.all()
@@ -701,6 +698,8 @@ def review(request, addon, channel=None):
         else []
     )
 
+    Addon._attach_authors([addon], listed=None, to_attr='current_authors')
+
     ctx = context(
         # Used for reviewer subscription check, don't use global `is_reviewer`
         # since that actually is `is_user_any_kind_of_reviewer`.
@@ -716,8 +715,10 @@ def review(request, addon, channel=None):
         actions_comments=actions_comments,
         actions_delayable=actions_delayable,
         actions_full=actions_full,
+        actions_policies=actions_policies,
         actions_reasons=actions_reasons,
-        actions_resolves_abuse_reports=actions_resolves_abuse_reports,
+        actions_attachments=actions_attachments,
+        actions_resolves_cinder_jobs=actions_resolves_cinder_jobs,
         addon=addon,
         addons_sharing_same_guid=addons_sharing_same_guid,
         approvals_info=approvals_info,
@@ -995,62 +996,6 @@ def theme_background_images(request, version_id):
     return version.get_background_images_encoded(header_only=False)
 
 
-@login_required
-@set_csp(**settings.RESTRICTED_DOWNLOAD_CSP)
-def download_git_stored_file(request, version_id, filename):
-    version = get_object_or_404(Version.unfiltered, id=int(version_id))
-
-    try:
-        addon = version.addon
-    except Addon.DoesNotExist:
-        raise http.Http404
-
-    if version.channel == amo.CHANNEL_LISTED:
-        is_owner = acl.check_addon_ownership(request.user, addon, allow_developer=True)
-        if not (acl.is_reviewer(request.user, addon) or is_owner):
-            raise PermissionDenied
-    else:
-        if not acl.author_or_unlisted_viewer_or_reviewer(request.user, addon):
-            raise http.Http404
-
-    file = version.file
-
-    serializer = FileInfoSerializer(
-        instance=file,
-        context={'file': filename, 'request': request, 'version': version},
-    )
-
-    tree = serializer.tree
-
-    try:
-        blob_or_tree = tree[serializer._get_selected_file()]
-
-        if blob_or_tree.type == pygit2.GIT_OBJ_TREE:
-            return http.HttpResponseBadRequest("Can't serve directories")
-        selected_file = serializer._get_entries()[filename]
-    except (KeyError, NotFound):
-        raise http.Http404()
-
-    actual_blob = serializer.git_repo[blob_or_tree.oid]
-
-    response = http.HttpResponse(
-        content=actual_blob.data, content_type=serializer.get_mimetype(file)
-    )
-
-    # Backported from Django 2.1 to handle unicode filenames properly
-    selected_filename = selected_file['filename']
-    try:
-        selected_filename.encode('ascii')
-        file_expr = f'filename="{selected_filename}"'
-    except UnicodeEncodeError:
-        file_expr = f"filename*=utf-8''{quote(selected_filename)}"
-
-    response['Content-Disposition'] = f'attachment; {file_expr}'
-    response['Content-Length'] = actual_blob.size
-
-    return response
-
-
 @any_reviewer_required
 def developer_profile(request, user_id):
     developer = get_object_or_404(UserProfile, id=user_id)
@@ -1171,27 +1116,12 @@ class AddonReviewerViewSet(GenericViewSet):
 
     @drf_action(
         detail=True,
-        methods=['post'],
-        permission_classes=[GroupPermission(amo.permissions.REVIEWS_ADMIN)],
-    )
-    def clear_pending_rejections(self, request, **kwargs):
-        addon = get_object_or_404(Addon, pk=kwargs['pk'])
-        status_code = status.HTTP_202_ACCEPTED
-        VersionReviewerFlags.objects.filter(version__addon=addon).update(
-            pending_rejection=None,
-            pending_rejection_by=None,
-            pending_content_rejection=None,
-        )
-        # Since we're clearing pending rejection on multiple versions through
-        # a queryset .update(), we are not going through post_save callbacks,
-        # so we might be missing due dates on affected versions.
-        addon.update_all_due_dates()
-        return Response(status=status_code)
-
-    @drf_action(
-        detail=True,
         methods=['get'],
         permission_classes=[AllowAnyKindOfReviewer],
+        authentication_classes=[
+            JWTKeyAuthentication,
+            SessionIDAuthentication,
+        ],
         url_path=r'file/(?P<file_id>[^/]+)/validation',
     )
     def json_file_validation(self, request, **kwargs):
@@ -1204,8 +1134,8 @@ class AddonReviewerViewSet(GenericViewSet):
             raise PermissionDenied
         try:
             result = file.validation
-        except File.validation.RelatedObjectDoesNotExist:
-            raise http.Http404
+        except File.validation.RelatedObjectDoesNotExist as exc:
+            raise http.Http404 from exc
         return JsonResponse(
             {
                 'validation': result.processed_validation,
@@ -1224,7 +1154,7 @@ class AddonReviewerViewSet(GenericViewSet):
         status_code = status.HTTP_202_ACCEPTED
         try:
             due_date = datetime.fromisoformat(request.data.get('due_date'))
-            version.update(due_date=due_date)
+            version.reset_due_date(due_date=due_date)
         except TypeError:
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(status=status_code)
@@ -1245,269 +1175,6 @@ class AddonReviewerViewSet(GenericViewSet):
         due_date = version.reload().due_date
         due_date_string = due_date.isoformat(timespec='seconds') if due_date else None
         return Response(status=status_code, data={'due_date': due_date_string})
-
-
-class ReviewAddonVersionMixin:
-    permission_classes = [
-        AnyOf(AllowListedViewerOrReviewer, AllowUnlistedViewerOrReviewer)
-    ]
-    lookup_value_regex = r'\d+'
-
-    def get_queryset(self):
-        # Permission classes disallow access to non-public/unlisted add-ons
-        # unless logged in as a reviewer/addon owner/admin, so we don't have to
-        # filter the base queryset here.
-        addon = self.get_addon_object()
-
-        qs = (
-            addon.versions(manager='unfiltered_for_relations')
-            .all()
-            # We don't need any transforms on the version, not even
-            # translations.
-            .no_transforms()
-            .order_by('-created')
-        )
-
-        if not self.can_access_unlisted():
-            qs = qs.filter(channel=amo.CHANNEL_LISTED)
-
-        return qs
-
-    def can_access_unlisted(self):
-        """Return True if we can access unlisted versions with the current
-        request. Cached on the viewset instance."""
-        if not hasattr(self, 'can_view_unlisted'):
-            # Allow viewing unlisted for reviewers with permissions or
-            # addon authors.
-            addon = self.get_addon_object()
-            self.can_view_unlisted = acl.is_unlisted_addons_viewer_or_reviewer(
-                self.request.user
-            ) or addon.has_author(self.request.user)
-        return self.can_view_unlisted
-
-    def get_addon_object(self):
-        if not hasattr(self, 'addon_object'):
-            # We only need translations on the add-on, no other transforms.
-            self.addon_object = get_object_or_404(
-                Addon.unfiltered.all().only_translations(),
-                pk=self.kwargs.get('addon_pk'),
-            )
-        return self.addon_object
-
-    def check_permissions(self, request):
-        if self.action == 'list':
-            # When listing DRF doesn't explicitly check for object permissions
-            # but here we need to do that against the parent add-on.
-            # So we're calling check_object_permission() ourselves,
-            # which will pass down the addon object directly.
-            return super().check_object_permissions(request, self.get_addon_object())
-
-        super().check_permissions(request)
-
-    def check_object_permissions(self, request, obj):
-        """
-        Check if the request should be permitted for a given version object.
-        Raises an appropriate exception if the request is not permitted.
-        """
-        # If the instance is marked as deleted and the client is not allowed to
-        # see deleted instances, we want to return a 404, behaving as if it
-        # does not exist.
-        if obj.deleted and not (
-            GroupPermission(amo.permissions.ADDONS_VIEW_DELETED).has_object_permission(
-                self.request, self, obj.addon
-            )
-        ):
-            raise http.Http404
-
-        # Now check permissions using DRF implementation on the add-on, it
-        # should be all we need.
-        return super().check_object_permissions(request, obj.addon)
-
-
-class ReviewAddonVersionViewSet(
-    ReviewAddonVersionMixin, ListModelMixin, RetrieveModelMixin, GenericViewSet
-):
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        context['file'] = self.request.GET.get('file', None)
-
-        if self.request.GET.get('file_only', 'false') == 'true':
-            context['exclude_entries'] = True
-
-        return context
-
-    def get_serializer_class(self):
-        if self.request.GET.get('file_only', 'false') == 'true':
-            return AddonBrowseVersionSerializerFileOnly
-        return AddonBrowseVersionSerializer
-
-    def list(self, request, *args, **kwargs):
-        """Return all (re)viewable versions for this add-on.
-
-        Full list, no pagination."""
-        qs = self.filter_queryset(self.get_queryset())
-        serializer = DiffableVersionSerializer(qs, many=True)
-        return Response(serializer.data)
-
-
-class ReviewAddonVersionDraftCommentViewSet(
-    RetrieveModelMixin,
-    ListModelMixin,
-    CreateModelMixin,
-    DestroyModelMixin,
-    UpdateModelMixin,
-    GenericViewSet,
-):
-    permission_classes = [
-        AnyOf(AllowListedViewerOrReviewer, AllowUnlistedViewerOrReviewer)
-    ]
-
-    queryset = DraftComment.objects.all()
-    serializer_class = DraftCommentSerializer
-    lookup_value_regex = r'\d+'
-
-    def check_object_permissions(self, request, obj):
-        """Check permissions against the parent add-on object."""
-        return super().check_object_permissions(request, obj.version.addon)
-
-    def _verify_object_permissions(self, object_to_verify, version):
-        """Verify permissions.
-
-        This method works for `Version` and `DraftComment` objects.
-        """
-        # If the instance is marked as deleted and the client is not allowed to
-        # see deleted instances, we want to return a 404, behaving as if it
-        # does not exist.
-        if version.deleted and not (
-            GroupPermission(amo.permissions.ADDONS_VIEW_DELETED).has_object_permission(
-                self.request, self, version.addon
-            )
-        ):
-            raise http.Http404
-
-        # Now we can checking permissions
-        super().check_object_permissions(self.request, version.addon)
-
-    def get_queryset(self):
-        # Preload version once for all drafts returned, and join with user to
-        # avoid extra queries for those.
-        return self.get_version_object().draftcomment_set.all().select_related('user')
-
-    def get_object(self, **kwargs):
-        qset = self.filter_queryset(self.get_queryset())
-
-        kwargs.setdefault(
-            self.lookup_field,
-            self.kwargs.get(self.lookup_url_kwarg or self.lookup_field),
-        )
-
-        obj = get_object_or_404(qset, **kwargs)
-        self._verify_object_permissions(obj, obj.version)
-        return obj
-
-    def get_addon_object(self):
-        if not hasattr(self, 'addon_object'):
-            self.addon_object = get_object_or_404(
-                # The serializer will not need to return much info about the
-                # addon, so we can use just the translations transformer and
-                # avoid the rest.
-                Addon.unfiltered.all().only_translations(),
-                pk=self.kwargs['addon_pk'],
-            )
-        return self.addon_object
-
-    def get_version_object(self):
-        if not hasattr(self, 'version_object'):
-            self.version_object = get_object_or_404(
-                # The serializer will not need any of the stuff the
-                # transformers give us for the version. We do need to fetch
-                # using an unfiltered manager to see deleted versions, though.
-                self.get_addon_object()
-                .versions(manager='unfiltered_for_relations')
-                .all()
-                .no_transforms(),
-                pk=self.kwargs['version_pk'],
-            )
-            self._verify_object_permissions(self.version_object, self.version_object)
-        return self.version_object
-
-    def get_extra_comment_data(self):
-        return {
-            'version_id': self.get_version_object().pk,
-            'user': self.request.user.pk,
-        }
-
-    def filter_queryset(self, qset):
-        qset = super().filter_queryset(qset)
-        # Filter to only show your comments. We're already filtering on version
-        # in get_queryset() as starting from the related manager allows us to
-        # only load the version once.
-        return qset.filter(user=self.request.user)
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        context['version'] = self.get_version_object()
-        # Patch in `version` and `user` as those are required by the serializer
-        # and not provided by the API client as part of the POST data.
-        self.request.data.update(self.get_extra_comment_data())
-        return context
-
-
-class ReviewAddonVersionCompareViewSet(
-    ReviewAddonVersionMixin, RetrieveModelMixin, GenericViewSet
-):
-    def filter_queryset(self, qs):
-        return qs.select_related('file__validation')
-
-    def get_objects(self):
-        """Return a dict with both versions needed for the comparison,
-        emulating what get_object() and get_version_object() do, but avoiding
-        redundant queries.
-
-        Dict keys are `instance` and `parent_version` for the main version
-        object and the one to compare to, respectively."""
-        pk = int(self.kwargs['pk'])
-        parent_version_pk = int(self.kwargs['version_pk'])
-        all_pks = {pk, parent_version_pk}
-        qs = self.filter_queryset(self.get_queryset())
-        objs = qs.in_bulk(all_pks)
-        if len(objs) != len(all_pks):
-            # Return 404 if one of the objects requested failed to load. For
-            # convenience in tests we allow self-comparaison even though it's
-            # pointless, so check against len(all_pks) and not just `2`.
-            raise http.Http404
-        for obj in objs.values():
-            self.check_object_permissions(self.request, obj)
-        return {'instance': objs[pk], 'parent_version': objs[parent_version_pk]}
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        context['file'] = self.request.GET.get('file', None)
-
-        if self.request.GET.get('file_only', 'false') == 'true':
-            context['exclude_entries'] = True
-
-        return context
-
-    def get_serializer(self, instance=None, data=None, many=False, partial=False):
-        context = self.get_serializer_context()
-        context['parent_version'] = data['parent_version']
-
-        if self.request.GET.get('file_only', 'false') == 'true':
-            return AddonCompareVersionSerializerFileOnly(
-                instance=instance, context=context
-            )
-
-        return AddonCompareVersionSerializer(instance=instance, context=context)
-
-    def retrieve(self, request, *args, **kwargs):
-        objs = self.get_objects()
-        version = objs['instance']
-
-        serializer = self.get_serializer(
-            instance=version, data={'parent_version': objs['parent_version']}
-        )
-        return Response(serializer.data)
 
 
 @bigquery_api_view(json_default=dict)
@@ -1550,3 +1217,66 @@ def review_version_redirect(request, addon, version):
     )
     url = reverse('reviewers.review', args=(channel_text, addon.pk))
     return redirect(url + page_param + f'#version-{to_dom_id(version)}')
+
+
+@permission_or_tools_listed_view_required(amo.permissions.REVIEWS_ADMIN)
+def queue_decisions(request, tab):
+    TableObj = reviewer_tables_registry[tab]
+    qs = TableObj.get_queryset(request)
+    page = paginate(request, qs, per_page=20)
+
+    return TemplateResponse(
+        request,
+        'reviewers/queue.html',
+        context=context(
+            tab=tab,
+            page=page,
+            registry=reviewer_tables_registry,
+            title=TableObj.title,
+        ),
+    )
+
+
+@permission_or_tools_listed_view_required(amo.permissions.REVIEWS_ADMIN)
+def decision_review(request, decision_id):
+    decision = get_object_or_404(ContentDecision, pk=decision_id)
+    cinder_jobs_qs = CinderJob.objects.filter(decision_id=decision.id)
+    form = HeldDecisionReviewForm(
+        request.POST if request.method == 'POST' else None,
+        cinder_jobs_qs=cinder_jobs_qs,
+    )
+    if form.is_valid():
+        data = form.cleaned_data
+        match data.get('choice'):
+            case 'yes':
+                decision.execute_action(release_hold=True)
+                decision.send_notifications()
+            case 'no':
+                # TODO: Make use of Cinder override to create new decision, and notify
+                # that new decision to Cinder
+                decision.update(action=DECISION_ACTIONS.AMO_APPROVE, notes='')
+                decision.policies.set(
+                    CinderPolicy.objects.filter(
+                        default_cinder_action=DECISION_ACTIONS.AMO_APPROVE
+                    )
+                )
+                decision.execute_action(release_hold=True)
+                decision.send_notifications()
+            case 'forward':
+                # TODO: Refactor so we can push this through the normal ContentDecision
+                # execution flow.
+                decision.update(action_date=datetime.now())
+                for job in cinder_jobs_qs:
+                    handle_escalate_action.delay(job_pk=job.id)
+        return redirect('reviewers.queue_decisions')
+    return TemplateResponse(
+        request,
+        'reviewers/decision_review.html',
+        context=context(
+            cinder_url=urljoin(
+                settings.CINDER_SERVER_URL, f'/decision/{decision.cinder_id}'
+            ),
+            decision=decision,
+            form=form,
+        ),
+    )

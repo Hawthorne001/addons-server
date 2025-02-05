@@ -13,7 +13,7 @@ from olympia.reviewers.models import ReviewActionReason
 
 from ..admin import BlocklistSubmissionAdmin
 from ..forms import MultiAddForm, MultiDeleteForm
-from ..models import Block, BlocklistSubmission, BlockVersion
+from ..models import Block, BlocklistSubmission, BlockType, BlockVersion
 
 
 class TestBlocklistSubmissionForm(TestCase):
@@ -60,11 +60,12 @@ class TestBlocklistSubmissionForm(TestCase):
 
     def test_changed_version_ids_choices_add_action(self):
         data = {
-            'action': str(BlocklistSubmission.ACTION_ADDCHANGE),
+            'action': str(BlocklistSubmission.ACTIONS.ADDCHANGE),
             'input_guids': f'{self.new_addon.guid}\n'
             f'{self.existing_block_full.guid}\n'
             f'{self.existing_block_partial.guid}\n'
             'invalid@guid',
+            'block_type': BlockType.BLOCKED,
         }
         Form = self.get_form()
         form = Form(data=data)
@@ -113,11 +114,12 @@ class TestBlocklistSubmissionForm(TestCase):
     def test_changed_version_ids_choices_delete_action(self):
         Form = self.get_form()
         data = {
-            'action': str(BlocklistSubmission.ACTION_DELETE),
+            'action': str(BlocklistSubmission.ACTIONS.DELETE),
             'input_guids': f'{self.new_addon.guid}\n'
             f'{self.existing_block_full.guid}\n'
             f'{self.existing_block_partial.guid}\n'
             'invalid@guid',
+            'block_type': BlockType.BLOCKED,
         }
         form = Form(data=data)
         assert form.fields['changed_version_ids'].choices == [
@@ -185,7 +187,7 @@ class TestBlocklistSubmissionForm(TestCase):
         submission = BlocklistSubmission.objects.create(
             input_guids=f'{self.new_addon.guid}\n{self.existing_block_partial.guid}',
         )
-        for action in BlocklistSubmission.ACTIONS:
+        for action in BlocklistSubmission.ACTIONS.values.keys():
             # they're the same for each of the actions
             submission.update(
                 action=action,
@@ -205,11 +207,12 @@ class TestBlocklistSubmissionForm(TestCase):
 
     def test_changed_version_ids_widget(self):
         data = {
-            'action': str(BlocklistSubmission.ACTION_ADDCHANGE),
+            'action': str(BlocklistSubmission.ACTIONS.ADDCHANGE),
             'input_guids': f'{self.new_addon.guid}\n'
             f'{self.existing_block_full.guid}\n'
             f'{self.existing_block_partial.guid}\n'
             'invalid@guid',
+            'block_type': BlockType.BLOCKED,
             'changed_version_ids': [self.new_addon.current_version.id],
         }
         form = self.get_form()(data=data)
@@ -221,6 +224,7 @@ class TestBlocklistSubmissionForm(TestCase):
             v_id for _guid, opts in field.choices for (v_id, _text) in opts
         ]
         assert field.widget.get_context(name, value, attrs) == {
+            'verb': 'Block',
             'widget': {
                 'attrs': {'multiple': True, **attrs},
                 'choices': flattened_choices,
@@ -291,11 +295,12 @@ class TestBlocklistSubmissionForm(TestCase):
     def test_new_blocks_must_have_changed_versions(self):
         Form = self.get_form()
         data = {
-            'action': str(BlocklistSubmission.ACTION_ADDCHANGE),
+            'action': str(BlocklistSubmission.ACTIONS.ADDCHANGE),
             'input_guids': f'{self.new_addon.guid}\n'
             f'{self.existing_block_full.guid}\n'
             f'{self.existing_block_partial.guid}\n'
             'invalid@guid',
+            'block_type': BlockType.BLOCKED,
             # only one version selected
             'changed_version_ids': [self.partial_existing_addon_v_notblocked.id],
         }
@@ -308,7 +313,7 @@ class TestBlocklistSubmissionForm(TestCase):
 
         # delete action is similar, but we allow deleting a block with no versions
         Block.objects.create(addon=self.new_addon, updated_by=self.user)
-        data['action'] = str(BlocklistSubmission.ACTION_DELETE)
+        data['action'] = str(BlocklistSubmission.ACTIONS.DELETE)
         data['changed_version_ids'] = [
             self.partial_existing_addon_v_blocked.id,
             self.full_existing_addon_v1.id,
@@ -334,10 +339,11 @@ class TestBlocklistSubmissionForm(TestCase):
             version=old_blocked_addon_version, block=self.existing_block_partial
         )
         data = {
-            'action': str(BlocklistSubmission.ACTION_ADDCHANGE),
+            'action': str(BlocklistSubmission.ACTIONS.ADDCHANGE),
             'input_guids': f'{self.new_addon.guid}\n'
             f'{self.existing_block_full.guid}\n'
             f'{self.existing_block_partial.guid}',
+            'block_type': BlockType.BLOCKED,
             'changed_version_ids': [
                 self.new_addon.current_version.id,
             ],
@@ -354,7 +360,7 @@ class TestBlocklistSubmissionForm(TestCase):
         assert form.errors == {
             'changed_version_ids': [
                 f'{self.partial_existing_addon.guid}:{ver_string} exists more than once'
-                f'. All {ver_string} versions must be blocked together'
+                f'. All {ver_string} versions must be selected together.'
             ]
         }
 
@@ -370,6 +376,7 @@ class TestBlocklistSubmissionForm(TestCase):
             f'{self.existing_block_full.guid}\n'
             f'{self.existing_block_partial.guid}\n'
             'invalid@guid',
+            'block_type': BlockType.BLOCKED,
             'url': 'new url',
             'update_url_value': False,
             'reason': 'new reason',
@@ -399,7 +406,9 @@ class TestBlocklistSubmissionForm(TestCase):
         ReviewActionReason.objects.create(
             name='inactive', canned_block_reason='.', is_active=False
         )
-        ReviewActionReason.objects.create(name='empty', canned_block_reason='')
+        ReviewActionReason.objects.create(
+            name='empty', canned_block_reason='', canned_response='a'
+        )
 
         form = self.get_form()(data={'input_guids': addon.guid})
 

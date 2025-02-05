@@ -23,9 +23,6 @@ SITE_URL = 'https://' + DOMAIN
 INTERNAL_SITE_URL = env('INTERNAL_SITE_URL', default='https://addons-dev.allizom.org')
 EXTERNAL_SITE_URL = env('EXTERNAL_SITE_URL', default='https://addons-dev.allizom.org')
 SERVICES_URL = 'https://' + SERVICES_DOMAIN
-CODE_MANAGER_URL = env(
-    'CODE_MANAGER_URL', default='https://code.addons-dev.allizom.org'
-)
 STATIC_URL = '%s/static-server/' % EXTERNAL_SITE_URL
 MEDIA_URL = '%s/user-media/' % EXTERNAL_SITE_URL
 
@@ -74,6 +71,6 @@ FXA_CONTENT_HOST = 'https://accounts.stage.mozaws.net'
 FXA_OAUTH_HOST = 'https://oauth.stage.mozaws.net/v1'
 FXA_PROFILE_HOST = 'https://profile.stage.mozaws.net/v1'
 
-REMOTE_SETTINGS_IS_TEST_SERVER = True
-
 SITEMAP_DEBUG_AVAILABLE = True
+
+ENABLE_ADMIN_MLBF_UPLOAD = True

@@ -7,8 +7,8 @@ from django.utils import translation
 import requests
 from django_statsd.clients import statsd
 
+import olympia.core.logger
 from olympia import amo
-from olympia.activity.models import ActivityLog
 from olympia.addons.models import Addon
 from olympia.amo.celery import task
 from olympia.amo.decorators import use_primary_db
@@ -16,7 +16,17 @@ from olympia.amo.utils import to_language
 from olympia.reviewers.models import NeedsHumanReview, UsageTier
 from olympia.users.models import UserProfile
 
-from .models import AbuseReport, CinderDecision, CinderJob, CinderPolicy
+from .cinder import CinderAddonHandledByLegal
+from .models import (
+    AbuseReport,
+    AbuseReportManager,
+    CinderJob,
+    CinderPolicy,
+    ContentDecision,
+)
+
+
+log = olympia.core.logger.getLogger('z.abuse')
 
 
 @task
@@ -43,7 +53,11 @@ def flag_high_abuse_reports_addons_according_to_review_tier():
 
     abuse_reports_count_qs = (
         AbuseReport.objects.values('guid')
-        .filter(guid=OuterRef('guid'), created__gte=datetime.now() - timedelta(days=14))
+        .filter(
+            ~AbuseReportManager.is_individually_actionable_q(),
+            guid=OuterRef('guid'),
+            created__gte=datetime.now() - timedelta(days=14),
+        )
         .annotate(guid_abuse_reports_count=Count('*'))
         .values('guid_abuse_reports_count')
         .order_by()
@@ -81,7 +95,7 @@ def appeal_to_cinder(
     *, decision_cinder_id, abuse_report_id, appeal_text, user_id, is_reporter
 ):
     try:
-        decision = CinderDecision.objects.get(cinder_id=decision_cinder_id)
+        decision = ContentDecision.objects.get(cinder_id=decision_cinder_id)
         if abuse_report_id:
             abuse_report = AbuseReport.objects.get(id=abuse_report_id)
         else:
@@ -109,56 +123,80 @@ def appeal_to_cinder(
 
 @task
 @use_primary_db
-def resolve_job_in_cinder(*, cinder_job_id, log_entry_id):
+def report_decision_to_cinder_and_notify(*, decision_id):
     try:
-        cinder_job = CinderJob.objects.get(id=cinder_job_id)
-        log_entry = ActivityLog.objects.get(id=log_entry_id)
-        cinder_job.resolve_job(log_entry=log_entry)
-    except Exception:
-        statsd.incr('abuse.tasks.resolve_job_in_cinder.failure')
-        raise
-    else:
-        statsd.incr('abuse.tasks.resolve_job_in_cinder.success')
-
-
-@task
-@use_primary_db
-def notify_addon_decision_to_cinder(*, log_entry_id, addon_id=None):
-    try:
-        log_entry = ActivityLog.objects.get(id=log_entry_id)
-        addon = Addon.unfiltered.get(id=addon_id)
-        decision = CinderDecision(addon=addon)
-        decision.notify_reviewer_decision(
-            log_entry=log_entry,
-            entity_helper=CinderJob.get_entity_helper(
-                decision.target, resolved_in_reviewer_tools=True
-            ),
+        decision = ContentDecision.objects.get(id=decision_id)
+        entity_helper = CinderJob.get_entity_helper(
+            decision.target,
+            resolved_in_reviewer_tools=True,
         )
+        decision.report_to_cinder(entity_helper)
+        # We've already executed the action in the reviewer tools
+        decision.send_notifications()
     except Exception:
-        statsd.incr('abuse.tasks.notify_addon_decision_to_cinder.failure')
+        statsd.incr('abuse.tasks.report_decision_to_cinder_and_notify.failure')
         raise
     else:
-        statsd.incr('abuse.tasks.notify_addon_decision_to_cinder.success')
+        statsd.incr('abuse.tasks.report_decision_to_cinder_and_notify.success')
 
 
 @task
 @use_primary_db
 def sync_cinder_policies():
     max_length = CinderPolicy._meta.get_field('name').max_length
+    policies_in_use_q = (
+        Q(contentdecision__id__gte=0)
+        | Q(reviewactionreason__id__gte=0)
+        | Q(expose_in_reviewer_tools=True)
+    )
 
-    def sync_policies(policies, parent_id=None):
-        for policy in policies:
+    def sync_policies(data, parent_id=None):
+        policies_in_cinder = set()
+        for policy in data:
+            if (labels := [label['name'] for label in policy.get('labels', [])]) and (
+                'AMO' not in labels
+            ):
+                # If the policy is labelled, but not for AMO, skip it
+                continue
+            policies_in_cinder.add(policy['uuid'])
             cinder_policy, _ = CinderPolicy.objects.update_or_create(
                 uuid=policy['uuid'],
                 defaults={
                     'name': policy['name'][:max_length],
                     'text': policy['description'],
                     'parent_id': parent_id,
+                    'modified': datetime.now(),
+                    'present_in_cinder': True,
                 },
             )
 
             if nested := policy.get('nested_policies'):
-                sync_policies(nested, cinder_policy.id)
+                policies_in_cinder.update(sync_policies(nested, cinder_policy.id))
+        return policies_in_cinder
+
+    def delete_unused_orphaned_policies(policies_in_cinder):
+        qs = CinderPolicy.objects.exclude(uuid__in=policies_in_cinder).exclude(
+            policies_in_use_q
+        )
+        if qs.exists():
+            log.info(
+                'Deleting orphaned Cinder Policy not in use: %s',
+                list(qs.values_list('uuid', flat=True)),
+            )
+            qs.delete()
+
+    def mark_used_orphaned_policies(policies_in_cinder):
+        qs = (
+            CinderPolicy.objects.exclude(uuid__in=policies_in_cinder)
+            .exclude(present_in_cinder=False)  # No need to mark those again.
+            .filter(policies_in_use_q)
+        )
+        if qs.exists():
+            log.info(
+                'Marking orphaned Cinder Policy still in use as such: %s',
+                list(qs.values_list('uuid', flat=True)),
+            )
+            qs.update(present_in_cinder=False)
 
     try:
         url = f'{settings.CINDER_SERVER_URL}policies'
@@ -171,9 +209,45 @@ def sync_cinder_policies():
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
-        sync_policies(data)
+        policies_in_cinder = sync_policies(data)
+        delete_unused_orphaned_policies(policies_in_cinder)
+        mark_used_orphaned_policies(policies_in_cinder)
     except Exception:
         statsd.incr('abuse.tasks.sync_cinder_policies.failure')
         raise
     else:
         statsd.incr('abuse.tasks.sync_cinder_policies.success')
+
+
+@task
+@use_primary_db
+def handle_escalate_action(*, job_pk):
+    old_job = CinderJob.objects.get(id=job_pk)
+    entity_helper = CinderJob.get_entity_helper(
+        old_job.target, resolved_in_reviewer_tools=True
+    )
+    job_id = entity_helper.workflow_recreate(notes=old_job.decision.notes, job=old_job)
+
+    old_job.handle_job_recreated(new_job_id=job_id, resolvable_in_reviewer_tools=True)
+
+
+@task
+@use_primary_db
+def handle_forward_to_legal_action(*, decision_pk):
+    decision = ContentDecision.objects.get(id=decision_pk)
+    old_job = getattr(decision, 'cinder_job', None)
+    entity_helper = CinderAddonHandledByLegal(decision.addon)
+    job_id = entity_helper.workflow_recreate(notes=decision.notes, job=old_job)
+
+    if old_job:
+        old_job.handle_job_recreated(
+            new_job_id=job_id, resolvable_in_reviewer_tools=False
+        )
+    else:
+        CinderJob.objects.update_or_create(
+            job_id=job_id,
+            defaults={
+                'resolvable_in_reviewer_tools': False,
+                'target_addon': decision.addon,
+            },
+        )

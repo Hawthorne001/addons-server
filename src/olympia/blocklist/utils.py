@@ -15,7 +15,10 @@ def block_activity_log_save(
     change,
     submission_obj=None,
 ):
+    from .models import BlockType
+
     action = amo.LOG.BLOCKLIST_BLOCK_EDITED if change else amo.LOG.BLOCKLIST_BLOCK_ADDED
+    action_version = amo.LOG.BLOCKLIST_VERSION_BLOCKED
     addon_versions = {ver.id: ver.version for ver in obj.addon_versions}
     blocked_versions = sorted(
         ver.version for ver in obj.addon_versions if ver.is_blocked
@@ -37,17 +40,21 @@ def block_activity_log_save(
         f'{len(blocked_versions)} total versions now blocked.',
     }
     if submission_obj:
-        details['signoff_state'] = submission_obj.SIGNOFF_STATES.get(
+        details['signoff_state'] = submission_obj.SIGNOFF_STATES.for_value(
             submission_obj.signoff_state
-        )
+        ).display
         if submission_obj.signoff_by:
             details['signoff_by'] = submission_obj.signoff_by.id
+        details['block_type'] = submission_obj.block_type
+        if submission_obj.block_type == BlockType.SOFT_BLOCKED:
+            action_version = amo.LOG.BLOCKLIST_VERSION_SOFT_BLOCKED
 
     log_create(action, obj.addon, obj.guid, obj, details=details, user=obj.updated_by)
     log_create(
-        amo.LOG.BLOCKLIST_VERSION_BLOCKED,
+        action_version,
         *((Version, version_id) for version_id in changed_version_ids),
         obj,
+        details={},
         user=obj.updated_by,
     )
 
@@ -97,9 +104,9 @@ def block_activity_log_delete(obj, deleted, *, submission_obj=None, delete_user=
     )
 
     if submission_obj:
-        details['signoff_state'] = submission_obj.SIGNOFF_STATES.get(
+        details['signoff_state'] = submission_obj.SIGNOFF_STATES.for_value(
             submission_obj.signoff_state
-        )
+        ).display
         if submission_obj.signoff_by:
             details['signoff_by'] = submission_obj.signoff_by.id
 
@@ -140,12 +147,11 @@ def disable_versions_for_block(block, submission):
     """Disable appropriate addon versions that are affected by the Block."""
     from olympia.reviewers.utils import ReviewBase
 
+    task_user = get_task_user()
+    activity_user = block.updated_by or get_task_user()
+    human_review = activity_user != task_user
     review = ReviewBase(
-        addon=block.addon,
-        version=None,
-        user=get_task_user(),
-        review_type='pending',
-        human_review=False,
+        addon=block.addon, version=None, user=activity_user, human_review=human_review
     )
     versions_to_reject = [
         ver
@@ -156,8 +162,16 @@ def disable_versions_for_block(block, submission):
         and ver.id in submission.changed_version_ids
         and ver.file.status != amo.STATUS_DISABLED
     ]
-    review.set_data({'versions': versions_to_reject})
-    review.reject_multiple_versions()
+    if versions_to_reject:
+        review.set_data(
+            {
+                'versions': versions_to_reject,
+                'comments': block.reason,
+                'is_addon_being_blocked': True,
+                'is_addon_being_disabled': submission.disable_addon,
+            }
+        )
+        review.auto_reject_multiple_versions()
 
     for version in block.addon_versions:
         # Clear active NeedsHumanReview on all blocked versions, we consider
@@ -186,19 +200,29 @@ def save_versions_to_blocks(guids, submission):
         block.average_daily_users_snapshot = block.current_adu
         # And now update the BlockVersion instances - instances to add first
         block_versions_to_create = []
+        block_versions_to_update = []
         for version in block.addon_versions:
-            if version.id in submission.changed_version_ids and (
-                not change or not version.is_blocked
-            ):
-                block_version = BlockVersion(block=block, version=version)
-                block_versions_to_create.append(block_version)
-                version.blockversion = block_version
+            if version.id in submission.changed_version_ids:
+                if version.is_blocked:
+                    block_version = version.blockversion
+                    block_versions_to_update.append(block_version)
+                else:
+                    block_version = BlockVersion(block=block, version=version)
+                    block_versions_to_create.append(block_version)
+                    version.blockversion = block_version
+                block_version.block_type = submission.block_type
         if not block_versions_to_create and not change:
             # If we have no versions to block and it's a new Block don't do anything.
             # Note: we shouldn't have gotten this far with such a guid - it would have
             # been raised as a validation error in the form.
             continue
         block.save()
+        # Update existing BlockVersion in bulk - the only field to update is
+        # 'block_type'.
+        BlockVersion.objects.bulk_update(
+            block_versions_to_update, fields=['block_type']
+        )
+        # Add new BlockVersion in bulk.
         BlockVersion.objects.bulk_create(block_versions_to_create)
 
         if submission.id:
@@ -216,6 +240,9 @@ def save_versions_to_blocks(guids, submission):
                 except GuidAlreadyDeniedError:
                     pass
             else:
+                # Disabling the add-on triggers a bunch of things so make sure
+                # it's done last, after we've gone through
+                # disable_versions_for_block().
                 block.addon.update(status=amo.STATUS_DISABLED)
 
     return blocks

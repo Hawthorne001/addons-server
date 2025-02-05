@@ -2,6 +2,12 @@ import functools
 
 from django import http
 from django.shortcuts import get_object_or_404
+from django.template.response import TemplateResponse
+from django.utils.translation import gettext
+
+import waffle
+from rest_framework import status
+from rest_framework.response import Response
 
 from olympia.access import acl
 from olympia.addons.models import Addon
@@ -23,8 +29,8 @@ def addon_view(f, qs=Addon.objects.all, include_deleted_when_checking_versions=F
                     addon = qs().get(id=addon_id)
                 elif lookup_field == 'guid':
                     addon = qs().get(guid=addon_id)
-            except Addon.DoesNotExist:
-                raise http.Http404
+            except Addon.DoesNotExist as exc:
+                raise http.Http404 from exc
             # Don't get in an infinite loop if addon.slug.isdigit().
             if addon.slug and addon.slug != addon_id:
                 url = request.path.replace(addon_id, addon.slug, 1)
@@ -55,3 +61,30 @@ def addon_view_factory(qs):
     # GOOD: lambda: Addon.objects.valid().filter(type=1)
     # BAD: Addon.objects.valid()
     return functools.partial(addon_view, qs=qs)
+
+
+def require_submissions_enabled(f):
+    """Require the enable-submissions waffle flag to be enabled."""
+
+    @functools.wraps(f)
+    def wrapper(request, *args, **kw):
+        flag = waffle.get_waffle_flag_model().get('enable-submissions')
+        if flag.is_active(request):
+            return f(request, *args, **kw)
+        reason = flag.note if hasattr(flag, 'note') else None
+        if getattr(request, 'is_api', True):
+            return Response(
+                {
+                    'error': gettext('Add-on uploads are temporarily unavailable.'),
+                    'reason': reason,
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return TemplateResponse(
+            request,
+            'amo/submissions_disabled.html',
+            status=503,
+            context={'reason': reason},
+        )
+
+    return wrapper

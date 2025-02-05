@@ -1,12 +1,21 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
+from django.core.files.base import ContentFile
 from django.utils.encoding import force_str
 
+from freezegun import freeze_time
 from pyquery import PyQuery as pq
 
 from olympia import amo
-from olympia.abuse.models import AbuseReport, CinderDecision, CinderJob, CinderPolicy
+from olympia.abuse.models import (
+    AbuseReport,
+    CinderAppeal,
+    CinderJob,
+    CinderPolicy,
+    CinderQueueMove,
+    ContentDecision,
+)
 from olympia.addons.models import Addon
 from olympia.amo.tests import (
     TestCase,
@@ -16,7 +25,6 @@ from olympia.amo.tests import (
     version_factory,
 )
 from olympia.constants.abuse import DECISION_ACTIONS
-from olympia.constants.reviewers import REVIEWER_DELAYED_REJECTION_PERIOD_DAYS_DEFAULT
 from olympia.files.models import File
 from olympia.reviewers.forms import ReviewForm
 from olympia.reviewers.models import (
@@ -25,7 +33,7 @@ from olympia.reviewers.models import (
 )
 from olympia.reviewers.utils import ReviewHelper
 from olympia.users.models import UserProfile
-from olympia.versions.models import Version
+from olympia.versions.models import Version, VersionReviewerFlags
 
 
 class TestReviewForm(TestCase):
@@ -42,9 +50,10 @@ class TestReviewForm(TestCase):
         self.request = FakeRequest()
         self.file = self.version.file
 
-    def get_form(self, data=None):
+    def get_form(self, data=None, files=None):
         return ReviewForm(
             data=data,
+            files=files,
             helper=ReviewHelper(
                 addon=self.addon, version=self.version, user=self.request.user
             ),
@@ -75,6 +84,7 @@ class TestReviewForm(TestCase):
         assert list(actions.keys()) == [
             'set_needs_human_review_multiple_versions',
             'reply',
+            'request_legal_review',
             'comment',
         ]
 
@@ -85,11 +95,12 @@ class TestReviewForm(TestCase):
         actions = self.get_form().helper.get_actions()
         assert list(actions.keys()) == [
             'unreject_latest_version',
-            'clear_pending_rejection_multiple_versions',
+            'change_or_clear_pending_rejection_multiple_versions',
             'clear_needs_human_review_multiple_versions',
             'set_needs_human_review_multiple_versions',
             'reply',
             'disable_addon',
+            'request_legal_review',
             'comment',
         ]
 
@@ -109,6 +120,7 @@ class TestReviewForm(TestCase):
             'confirm_multiple_versions',
             'set_needs_human_review_multiple_versions',
             'reply',
+            'request_legal_review',
             'comment',
         ]
 
@@ -122,11 +134,12 @@ class TestReviewForm(TestCase):
             'unreject_multiple_versions',
             'block_multiple_versions',
             'confirm_multiple_versions',
-            'clear_pending_rejection_multiple_versions',
+            'change_or_clear_pending_rejection_multiple_versions',
             'clear_needs_human_review_multiple_versions',
             'set_needs_human_review_multiple_versions',
             'reply',
             'disable_addon',
+            'request_legal_review',
             'comment',
         ]
 
@@ -140,6 +153,7 @@ class TestReviewForm(TestCase):
         assert list(actions.keys()) == [
             'set_needs_human_review_multiple_versions',
             'reply',
+            'request_legal_review',
             'comment',
         ]
 
@@ -149,10 +163,11 @@ class TestReviewForm(TestCase):
             addon_status=amo.STATUS_DELETED, file_status=amo.STATUS_DISABLED
         )
         assert list(actions.keys()) == [
-            'clear_pending_rejection_multiple_versions',
+            'change_or_clear_pending_rejection_multiple_versions',
             'clear_needs_human_review_multiple_versions',
             'set_needs_human_review_multiple_versions',
             'reply',
+            'request_legal_review',
             'comment',
         ]
 
@@ -167,6 +182,7 @@ class TestReviewForm(TestCase):
             'reject_multiple_versions',
             'set_needs_human_review_multiple_versions',
             'reply',
+            'request_legal_review',
             'comment',
         ]
 
@@ -177,11 +193,12 @@ class TestReviewForm(TestCase):
         )
         assert list(actions.keys()) == [
             'reject_multiple_versions',
-            'clear_pending_rejection_multiple_versions',
+            'change_or_clear_pending_rejection_multiple_versions',
             'clear_needs_human_review_multiple_versions',
             'set_needs_human_review_multiple_versions',
             'reply',
             'disable_addon',
+            'request_legal_review',
             'comment',
         ]
 
@@ -191,10 +208,11 @@ class TestReviewForm(TestCase):
             addon_status=amo.STATUS_DISABLED, file_status=amo.STATUS_DISABLED
         )
         assert list(actions.keys()) == [
-            'clear_pending_rejection_multiple_versions',
+            'change_or_clear_pending_rejection_multiple_versions',
             'clear_needs_human_review_multiple_versions',
             'reply',
             'enable_addon',
+            'request_legal_review',
             'comment',
         ]
 
@@ -240,7 +258,7 @@ class TestReviewForm(TestCase):
         self.empty_reason = ReviewActionReason.objects.create(
             name='d reason',
             is_active=True,
-            canned_response='',
+            canned_block_reason='block',
         )
         form = self.get_form()
         choices = form.fields['reasons'].choices
@@ -300,7 +318,7 @@ class TestReviewForm(TestCase):
         assert list(choices.queryset)[0] == self.reason_all
         assert list(choices.queryset)[1] == self.reason_theme
 
-    def test_reasons_not_required_for_reply(self):
+    def test_reasons_not_required_for_reply_but_versions_is(self):
         self.grant_permission(self.request.user, 'Addons:Review')
         form = self.get_form()
         assert not form.is_bound
@@ -308,12 +326,25 @@ class TestReviewForm(TestCase):
             data={
                 'action': 'reply',
                 'comments': 'lol',
+                'versions': [self.version.pk],
             }
         )
         assert form.helper.actions['reply']['requires_reasons'] is False
         assert form.is_bound
         assert form.is_valid()
         assert not form.errors
+
+        form = self.get_form(
+            data={
+                'action': 'reply',
+                'comments': 'lol',
+            }
+        )
+        assert form.is_bound
+        assert not form.is_valid()
+        assert form.errors == {
+            'versions': ['This field is required.'],
+        }
 
     def test_reasons_required_for_reject_multiple_versions(self):
         self.grant_permission(self.request.user, 'Addons:Review')
@@ -346,6 +377,196 @@ class TestReviewForm(TestCase):
         assert form.is_valid()
         assert not form.errors
 
+    def test_reasons_required_with_cinder_jobs(self):
+        self.grant_permission(self.request.user, 'Addons:Review')
+        self.addon.update(status=amo.STATUS_NOMINATED)
+        self.version.file.update(status=amo.STATUS_AWAITING_REVIEW)
+        job = CinderJob.objects.create(
+            job_id='1', resolvable_in_reviewer_tools=True, target_addon=self.addon
+        )
+        reason = ReviewActionReason.objects.create(name='A reason', canned_response='a')
+        form = self.get_form()
+        assert not form.is_bound
+        data = {'action': 'reject', 'comments': 'lol', 'cinder_jobs_to_resolve': [job]}
+        form = self.get_form(data=data)
+        assert form.is_bound
+        assert not form.is_valid()
+        assert form.errors == {'reasons': ['This field is required.']}
+
+        data['reasons'] = [reason]
+        form = self.get_form(data=data)
+        assert form.is_bound
+        assert form.is_valid()
+        assert not form.errors
+
+    def test_reasons_required_with_cinder_jobs_theme_too(self):
+        self.grant_permission(self.request.user, 'Addons:ThemeReview')
+        self.addon.update(type=amo.ADDON_STATICTHEME)
+        self.test_reasons_required_with_cinder_jobs()
+
+    def test_policies_required_with_cinder_jobs(self):
+        self.grant_permission(self.request.user, 'Addons:Review')
+        self.addon.update(status=amo.STATUS_NOMINATED)
+        self.version.file.update(status=amo.STATUS_AWAITING_REVIEW)
+        job = CinderJob.objects.create(
+            job_id='1', resolvable_in_reviewer_tools=True, target_addon=self.addon
+        )
+        policy = CinderPolicy.objects.create(
+            uuid='x',
+            name='ok',
+            expose_in_reviewer_tools=True,
+            default_cinder_action=DECISION_ACTIONS.AMO_IGNORE,
+        )
+        form = self.get_form()
+        assert not form.is_bound
+        data = {
+            'action': 'resolve_reports_job',
+            'cinder_jobs_to_resolve': [job.id],
+        }
+        form = self.get_form(data=data)
+        assert form.is_bound
+        assert not form.is_valid()
+        assert form.errors == {'cinder_policies': ['This field is required.']}
+
+        data['cinder_policies'] = [policy.id]
+        form = self.get_form(data=data)
+        assert form.is_bound
+        assert form.is_valid(), form.errors
+        assert not form.errors
+
+    def test_appeal_action_require_with_resolve_appeal_job(self):
+        self.grant_permission(self.request.user, 'Addons:Review')
+        self.addon.update(status=amo.STATUS_NOMINATED)
+        self.version.file.update(status=amo.STATUS_AWAITING_REVIEW)
+        job = CinderJob.objects.create(
+            job_id='1', resolvable_in_reviewer_tools=True, target_addon=self.addon
+        )
+        ContentDecision.objects.create(
+            appeal_job=job, addon=self.addon, action=DECISION_ACTIONS.AMO_DISABLE_ADDON
+        )
+        form = self.get_form()
+        assert not form.is_bound
+        data = {
+            'action': 'resolve_appeal_job',
+            'comments': 'lol',
+            'cinder_jobs_to_resolve': [job.id],
+        }
+        form = self.get_form(data=data)
+        assert form.is_bound
+        assert not form.is_valid()
+        assert form.errors == {'appeal_action': ['This field is required.']}
+
+        data['appeal_action'] = ['deny']
+        form = self.get_form(data=data)
+        assert form.is_bound
+        assert form.is_valid(), form.errors
+        assert not form.errors
+
+    def test_only_one_cinder_action_selected(self):
+        self.grant_permission(self.request.user, 'Addons:Review')
+        self.addon.update(status=amo.STATUS_NOMINATED)
+        self.version.file.update(status=amo.STATUS_AWAITING_REVIEW)
+        job = CinderJob.objects.create(
+            job_id='1', resolvable_in_reviewer_tools=True, target_addon=self.addon
+        )
+        no_action_policy = CinderPolicy.objects.create(
+            uuid='no', name='no action', expose_in_reviewer_tools=True
+        )
+        action_policy_a = CinderPolicy.objects.create(
+            uuid='a',
+            name='ignore',
+            expose_in_reviewer_tools=True,
+            default_cinder_action=DECISION_ACTIONS.AMO_IGNORE,
+        )
+        action_policy_b = CinderPolicy.objects.create(
+            uuid='b',
+            name='ignore again',
+            expose_in_reviewer_tools=True,
+            default_cinder_action=DECISION_ACTIONS.AMO_IGNORE,
+        )
+        action_policy_c = CinderPolicy.objects.create(
+            uuid='c',
+            name='approve',
+            expose_in_reviewer_tools=True,
+            default_cinder_action=DECISION_ACTIONS.AMO_APPROVE,
+        )
+        form = self.get_form()
+        assert not form.is_bound
+        data = {
+            'action': 'resolve_reports_job',
+            'cinder_jobs_to_resolve': [job.id],
+            'cinder_policies': [no_action_policy.id],
+        }
+        form = self.get_form(data=data)
+        assert not form.is_valid()
+        assert form.errors == {
+            '__all__': ['No policies selected with an associated cinder action.']
+        }
+
+        data['cinder_policies'] = [action_policy_a.id, action_policy_c.id]
+        form = self.get_form(data=data)
+        assert not form.is_valid()
+        assert form.errors == {
+            '__all__': ['Multiple policies selected with different cinder actions.']
+        }
+
+        data['cinder_policies'] = [action_policy_a.id, action_policy_b.id]
+        form = self.get_form(data=data)
+        assert form.is_valid()
+        assert not form.errors
+
+    def test_cinder_jobs_filtered_for_resolve_reports_job_and_resolve_appeal_job(self):
+        self.grant_permission(self.request.user, 'Addons:Review')
+        self.addon.update(status=amo.STATUS_NOMINATED)
+        self.version.file.update(status=amo.STATUS_AWAITING_REVIEW)
+        appeal_job = CinderJob.objects.create(
+            job_id='1', resolvable_in_reviewer_tools=True, target_addon=self.addon
+        )
+        ContentDecision.objects.create(
+            appeal_job=appeal_job,
+            addon=self.addon,
+            action=DECISION_ACTIONS.AMO_DISABLE_ADDON,
+        )
+        report_job = CinderJob.objects.create(
+            job_id='2', resolvable_in_reviewer_tools=True, target_addon=self.addon
+        )
+        AbuseReport.objects.create(cinder_job=report_job, guid=self.addon.guid)
+        policy = CinderPolicy.objects.create(
+            uuid='a',
+            name='ignore',
+            expose_in_reviewer_tools=True,
+            default_cinder_action=DECISION_ACTIONS.AMO_IGNORE,
+        )
+
+        data = {
+            'action': 'resolve_appeal_job',
+            'comments': 'lol',
+            'appeal_action': ['deny'],
+            'cinder_jobs_to_resolve': [report_job.id],
+        }
+        form = self.get_form(data=data)
+        form.is_valid()
+        assert form.cleaned_data['cinder_jobs_to_resolve'] == []
+
+        data['cinder_jobs_to_resolve'] = [report_job, appeal_job]
+        form = self.get_form(data=data)
+        form.is_valid()
+        assert form.cleaned_data['cinder_jobs_to_resolve'] == [appeal_job]
+
+        data = {
+            'action': 'resolve_reports_job',
+            'cinder_policies': [policy.id],
+            'cinder_jobs_to_resolve': [appeal_job.id],
+        }
+        form = self.get_form(data=data)
+        form.is_valid()
+        assert form.cleaned_data['cinder_jobs_to_resolve'] == []
+
+        data['cinder_jobs_to_resolve'] = [report_job.id, appeal_job.id]
+        form = self.get_form(data=data)
+        form.is_valid()
+        assert form.cleaned_data['cinder_jobs_to_resolve'] == [report_job]
+
     def test_boilerplate(self):
         self.grant_permission(self.request.user, 'Addons:Review')
         self.addon.update(status=amo.STATUS_NOMINATED)
@@ -374,6 +595,13 @@ class TestReviewForm(TestCase):
                         canned_response='reason 1',
                     )
                 ],
+                'cinder_policies': [
+                    CinderPolicy.objects.create(
+                        uuid='1',
+                        name='policy 1',
+                        expose_in_reviewer_tools=True,
+                    )
+                ],
             }
         )
         assert form.is_bound
@@ -396,6 +624,7 @@ class TestReviewForm(TestCase):
                         canned_response='reason 1',
                     )
                 ],
+                'versions': [self.version.pk],
             }
         )
         form.helper.actions['reply']['comments'] = False
@@ -426,6 +655,7 @@ class TestReviewForm(TestCase):
             expected_select_data_value = [
                 'reject_multiple_versions',
                 'set_needs_human_review_multiple_versions',
+                'reply',
             ]
         # We hide some of the versions using JavaScript + some data attributes on each
         # <option>.
@@ -483,6 +713,7 @@ class TestReviewForm(TestCase):
             # That version is approved.
             'block_multiple_versions',
             'reject_multiple_versions',
+            'reply',
             'set_needs_human_review_multiple_versions',
         ]
         assert option1.attrib.get('value') == str(self.version.pk)
@@ -493,6 +724,7 @@ class TestReviewForm(TestCase):
             # That version is pending.
             'approve_multiple_versions',
             'reject_multiple_versions',
+            'reply',
             'set_needs_human_review_multiple_versions',
         ]
         assert option2.attrib.get('value') == str(pending_version.pk)
@@ -504,15 +736,16 @@ class TestReviewForm(TestCase):
             # but it was never signed so it doesn't get
             # set_needs_human_review_multiple_versions
             'unreject_multiple_versions',
+            'reply',
         ]
         assert option3.attrib.get('value') == str(rejected_version.pk)
 
         option4 = doc('option[value="%s"]' % blocked_version.pk)[0]
         assert option4.attrib.get('class') == 'data-toggle'
-        # That version is blocked, so unreject_multiple_versions is not
-        # present. It was never signed, so
-        # set_needs_human_review_multiple_versions is also absent.
-        assert option4.attrib.get('data-value') == ''
+        # That version is blocked, so the only action available is reply,
+        # unreject_multiple_versions and
+        # set_needs_human_review_multiple_versions should be absent.
+        assert option4.attrib.get('data-value') == 'reply'
         assert option4.attrib.get('value') == str(blocked_version.pk)
 
     def test_versions_queryset_contains_pending_files_for_listed_admin_reviewer(self):
@@ -521,9 +754,10 @@ class TestReviewForm(TestCase):
         self.test_versions_queryset_contains_pending_files_for_listed(
             expected_select_data_value=[
                 'reject_multiple_versions',
-                'clear_pending_rejection_multiple_versions',
+                'change_or_clear_pending_rejection_multiple_versions',
                 'clear_needs_human_review_multiple_versions',
                 'set_needs_human_review_multiple_versions',
+                'reply',
             ]
         )
 
@@ -563,6 +797,13 @@ class TestReviewForm(TestCase):
             version_ids=[blocked_version.id],
             updated_by=user_factory(),
         )
+        deleted_version = version_factory(
+            addon=self.addon,
+            channel=amo.CHANNEL_UNLISTED,
+            file_kw={'status': amo.STATUS_DISABLED},
+        )
+        deleted_version.delete()
+
         self.version.update(channel=amo.CHANNEL_UNLISTED)
         # auto-approve everything
         for version in Version.unfiltered.all():
@@ -581,9 +822,9 @@ class TestReviewForm(TestCase):
         assert not form.is_bound
         assert form.fields['versions'].required is False
         assert list(form.fields['versions'].queryset) == list(
-            self.addon.versions.all().order_by('pk')
+            Version.unfiltered_for_relations.filter(addon=self.addon).order_by('pk')
         )
-        assert form.fields['versions'].queryset.count() == 4
+        assert form.fields['versions'].queryset.count() == 5
 
         content = str(form['versions'])
         doc = pq(content)
@@ -596,7 +837,7 @@ class TestReviewForm(TestCase):
 
         # <option>s should as well, and the value depends on which version:
         # the approved one and the pending one should have different values.
-        assert len(doc('option')) == 4
+        assert len(doc('option')) == 5
         option1 = doc('option[value="%s"]' % self.version.pk)[0]
         assert option1.attrib.get('class') == 'data-toggle'
         assert option1.attrib.get('data-value').split(' ') == [
@@ -604,6 +845,7 @@ class TestReviewForm(TestCase):
             'block_multiple_versions',
             'confirm_multiple_versions',
             'reject_multiple_versions',
+            'reply',
             'set_needs_human_review_multiple_versions',
         ]
         assert option1.attrib.get('value') == str(self.version.pk)
@@ -614,6 +856,7 @@ class TestReviewForm(TestCase):
             # That version is pending.
             'approve_multiple_versions',
             'reject_multiple_versions',
+            'reply',
             'set_needs_human_review_multiple_versions',
         ]
         assert option2.attrib.get('value') == str(pending_version.pk)
@@ -625,16 +868,28 @@ class TestReviewForm(TestCase):
             # but it was never signed so it doesn't get
             # set_needs_human_review_multiple_versions
             'unreject_multiple_versions',
+            'reply',
         ]
         assert option3.attrib.get('value') == str(rejected_version.pk)
 
         option4 = doc('option[value="%s"]' % blocked_version.pk)[0]
         assert option4.attrib.get('class') == 'data-toggle'
-        # That version is blocked, so unreject_multiple_versions is not
-        # present. It was never signed, so
-        # set_needs_human_review_multiple_versions is also absent.
-        assert option4.attrib.get('data-value') == ''
+        # That version is blocked, so the only action available is reply,
+        # unreject_multiple_versions and
+        # set_needs_human_review_multiple_versions should be absent.
+        assert option4.attrib.get('data-value') == 'reply'
         assert option4.attrib.get('value') == str(blocked_version.pk)
+
+        option5 = doc('option[value="%s"]' % deleted_version.pk)[0]
+        assert option5.attrib.get('class') == 'data-toggle'
+        assert option5.attrib.get('data-value').split(' ') == [
+            'unreject_multiple_versions',
+            'reply',
+            # The deleted auto-approved version can still have
+            # its auto-approval confirmed.
+            'confirm_multiple_versions',
+        ]
+        assert option5.attrib.get('value') == str(deleted_version.pk)
 
     def test_set_needs_human_review_presence(self):
         self.grant_permission(self.request.user, 'Addons:Review')
@@ -722,7 +977,7 @@ class TestReviewForm(TestCase):
                 'unreject_multiple_versions',
                 'block_multiple_versions',
                 'confirm_multiple_versions',
-                'clear_pending_rejection_multiple_versions',
+                'change_or_clear_pending_rejection_multiple_versions',
                 'clear_needs_human_review_multiple_versions',
                 'set_needs_human_review_multiple_versions',
             ]
@@ -753,28 +1008,140 @@ class TestReviewForm(TestCase):
         assert not form.is_valid()
         assert form.errors == {'versions': ['This field is required.']}
 
-    def test_delayed_rejection_days_widget_attributes(self):
-        # Regular reviewers can't customize the delayed rejection period.
+    def test_delayed_rejection_days_doesnt_show_up_for_regular_reviewers(self):
+        # Regular reviewers can't customize the delayed rejection period so
+        # the field is removed at init for them.
+        self.grant_permission(self.request.user, 'Addons:Review')
         form = self.get_form()
-        widget = form.fields['delayed_rejection_days'].widget
-        assert widget.attrs == {
-            'min': REVIEWER_DELAYED_REJECTION_PERIOD_DAYS_DEFAULT,
-            'max': REVIEWER_DELAYED_REJECTION_PERIOD_DAYS_DEFAULT,
-            'readonly': 'readonly',
-        }
+        assert 'delayed_rejection_date' not in form.fields
+        assert 'delayed_rejection' not in form.fields
+
+    @freeze_time('2025-01-23 12:52')
+    def test_delayed_rejection_days_shows_up_for_admin_reviewers(self):
         # Admin reviewers can customize the delayed rejection period.
+        self.grant_permission(self.request.user, 'Addons:Review')
         self.grant_permission(self.request.user, 'Reviews:Admin')
         form = self.get_form()
-        widget = form.fields['delayed_rejection_days'].widget
-        assert widget.attrs == {
-            'min': 1,
-            'max': 99,
+        assert 'delayed_rejection_date' in form.fields
+        assert 'delayed_rejection' in form.fields
+        assert form.fields['delayed_rejection_date'].widget.attrs == {
+            'min': '2025-01-24T12:52'
         }
+        assert form.fields['delayed_rejection_date'].initial == datetime(
+            2025, 2, 6, 13, 52
+        )
+        content = str(form['delayed_rejection'])
+        doc = pq(content)
+        inputs = doc('input[type=radio]')
+        assert (
+            inputs[0].label.text_content().strip()
+            == 'Delay rejection, requiring developer to correct before…'
+        )
+        assert inputs[0].attrib['value'] == 'True'
+        assert inputs[1].label.text_content().strip() == 'Reject immediately.'
+        assert inputs[1].attrib['value'] == 'False'
+        assert inputs[1].attrib['checked'] == 'checked'
+        assert inputs[1].attrib['class'] == 'data-toggle'
+        assert inputs[1].attrib['data-value'] == 'reject_multiple_versions'
+        assert inputs[2].label.text_content().strip() == 'Clear pending rejection.'
+        assert inputs[2].attrib['value'] == ''
+        assert inputs[2].attrib['class'] == 'data-toggle'
+        assert (
+            inputs[2].attrib['data-value']
+            == 'change_or_clear_pending_rejection_multiple_versions'
+        )
 
-    def test_delayed_rejection_showing_for_unlisted_awaiting(self):
-        self.addon.update(status=amo.STATUS_NULL)
-        self.version.update(channel=amo.CHANNEL_UNLISTED)
-        self.test_delayed_rejection_days_widget_attributes()
+    @freeze_time('2025-01-23 12:52')
+    def test_delayed_rejection_days_value_not_in_the_future(self):
+        self.grant_permission(self.request.user, 'Addons:Review,Reviews:Admin')
+        self.reason_a = ReviewActionReason.objects.create(
+            name='a reason',
+            is_active=True,
+            canned_response='Canned response for A',
+        )
+        data = {
+            'action': 'reject_multiple_versions',
+            'comments': 'foo!',
+            'delayed_rejection': 'True',
+            'delayed_rejection_date': '2025-01-23T12:52',
+            'reasons': [self.reason_a.pk],
+            'versions': [self.version.pk],
+        }
+        form = self.get_form(data=data)
+        assert not form.is_valid()
+        assert form.errors['delayed_rejection_date'] == [
+            'Delayed rejection date should be at least one day in the future'
+        ]
+
+        data['delayed_rejection_date'] = '2025-01-24T12:52'
+        form = self.get_form(data=data)
+        assert form.is_valid(), form.errors
+
+    def test_delayable_action_missing_fields(self):
+        self.grant_permission(self.request.user, 'Addons:Review,Reviews:Admin')
+        self.reason_a = ReviewActionReason.objects.create(
+            name='a reason',
+            is_active=True,
+            canned_response='Canned response for A',
+        )
+        data = {
+            'action': 'reject_multiple_versions',
+            'comments': 'foo!',
+            'reasons': [self.reason_a.pk],
+            'versions': [self.version.pk],
+        }
+        form = self.get_form(data=data)
+        assert not form.is_valid()
+        assert form.errors['delayed_rejection'] == ['This field is required.']
+
+        # 'False' or '' works, we just want to ensure the field was submitted.
+        form = self.get_form(data=data)
+        data['delayed_rejection'] = ''
+        assert form.is_valid()
+        form = self.get_form(data=data)
+        data['delayed_rejection'] = 'False'
+        assert form.is_valid()
+
+        # If 'True', we need a date.
+        data['delayed_rejection'] = 'True'
+        data['delayed_rejection_date'] = ''
+        form = self.get_form(data=data)
+        assert not form.is_valid()
+        assert form.errors['delayed_rejection_date'] == ['This field is required.']
+
+    def test_change_pending_rejection_multiple_versions_different_dates(self):
+        self.grant_permission(self.request.user, 'Addons:Review,Reviews:Admin')
+        in_the_future = datetime.now() + timedelta(days=15)
+        in_the_future2 = datetime.now() + timedelta(days=55)
+        VersionReviewerFlags.objects.create(
+            version=self.version,
+            pending_rejection=in_the_future,
+            pending_rejection_by=self.request.user,
+            pending_content_rejection=False,
+        )
+        new_version = version_factory(addon=self.addon)
+        VersionReviewerFlags.objects.create(
+            version=new_version,
+            pending_rejection=in_the_future2,
+            pending_rejection_by=self.request.user,
+            pending_content_rejection=False,
+        )
+
+        data = {
+            'action': 'change_or_clear_pending_rejection_multiple_versions',
+            'delayed_rejection': 'True',
+            'delayed_rejection_date': in_the_future.isoformat()[:16],
+            'versions': [self.version.pk, new_version.pk],
+        }
+        form = self.get_form(data=data)
+        assert not form.is_valid()
+        assert form.errors == {
+            'versions': [
+                'Can only change the delayed rejection date of multiple '
+                'versions at once if their pending rejection dates are all '
+                'the same.'
+            ]
+        }
 
     def test_version_pk(self):
         self.grant_permission(self.request.user, 'Addons:Review')
@@ -791,7 +1158,7 @@ class TestReviewForm(TestCase):
         form = self.get_form(data={**data, 'version_pk': self.version.pk})
         assert form.is_valid(), form.errors
 
-    def test_resolve_cinder_jobs_choices(self):
+    def test_cinder_jobs_to_resolve_choices(self):
         abuse_kw = {
             'guid': self.addon.guid,
             'location': AbuseReport.LOCATION.ADDON,
@@ -809,16 +1176,17 @@ class TestReviewForm(TestCase):
         AbuseReport.objects.create(
             **abuse_kw, cinder_job=cinder_job_2_reports, message='bbb'
         )
+
         cinder_job_appealed = CinderJob.objects.create(
             job_id='appealed',
-            decision=CinderDecision.objects.create(
+            decision=ContentDecision.objects.create(
                 action=DECISION_ACTIONS.AMO_DISABLE_ADDON,
                 addon=self.addon,
             ),
             resolvable_in_reviewer_tools=True,
             target_addon=self.addon,
         )
-        AbuseReport.objects.create(
+        appealed_abuse_report = AbuseReport.objects.create(
             **abuse_kw,
             cinder_job=cinder_job_appealed,
             message='ccc',
@@ -830,20 +1198,41 @@ class TestReviewForm(TestCase):
             target_addon=self.addon,
         )
         cinder_job_appealed.decision.update(appeal_job=cinder_job_appeal)
-        cinder_job_escalated = CinderJob.objects.create(
-            job_id='escalated',
-            decision=CinderDecision.objects.create(
+        CinderAppeal.objects.create(
+            text='some justification',
+            decision=cinder_job_appealed.decision,
+        )
+        # This wouldn't happen - a reporter can't appeal a disable decision
+        # - but we want to test the rendering of reporter vs. developer appeal text
+        CinderAppeal.objects.create(
+            text='some other justification',
+            decision=cinder_job_appealed.decision,
+            reporter_report=appealed_abuse_report,
+        )
+
+        cinder_job_forwarded = CinderJob.objects.create(
+            job_id='forwarded',
+            resolvable_in_reviewer_tools=True,
+            target_addon=self.addon,
+        )
+        CinderJob.objects.create(
+            job_id='forwarded_from',
+            forwarded_to_job=cinder_job_forwarded,
+            decision=ContentDecision.objects.create(
                 action=DECISION_ACTIONS.AMO_ESCALATE_ADDON,
                 notes='Why o why',
                 addon=self.addon,
             ),
-            resolvable_in_reviewer_tools=True,
-            target_addon=self.addon,
+        )
+        CinderQueueMove.objects.create(
+            cinder_job=cinder_job_forwarded,
+            notes='Zee de zee',
+            to_queue='amo-env-content-infringment',
         )
         AbuseReport.objects.create(
             **{**abuse_kw, 'location': AbuseReport.LOCATION.AMO},
             message='ddd',
-            cinder_job=cinder_job_escalated,
+            cinder_job=cinder_job_forwarded,
             addon_version='<script>alert()</script>',
         )
 
@@ -860,8 +1249,8 @@ class TestReviewForm(TestCase):
             **{**abuse_kw},
             message='fff',
             cinder_job=CinderJob.objects.create(
-                job_id='already resovled',
-                decision=CinderDecision.objects.create(
+                job_id='already resolved',
+                decision=ContentDecision.objects.create(
                     action=DECISION_ACTIONS.AMO_DISABLE_ADDON,
                     addon=self.addon,
                 ),
@@ -870,30 +1259,82 @@ class TestReviewForm(TestCase):
         )
 
         form = self.get_form()
-        choices = form.fields['resolve_cinder_jobs'].choices
+        choices = form.fields['cinder_jobs_to_resolve'].choices
         qs_list = list(choices.queryset)
         assert qs_list == [
             # Only unresolved, reviewer handled, jobs are shown
-            cinder_job_escalated,
+            cinder_job_forwarded,
             cinder_job_appeal,
             cinder_job_2_reports,
         ]
 
-        content = str(form['resolve_cinder_jobs'])
+        content = str(form['cinder_jobs_to_resolve'])
         doc = pq(content)
-        assert doc('label[for="id_resolve_cinder_jobs_0"]').text() == (
-            '[Escalation] "DSA: It violates Mozilla\'s Add-on Policies"\n'
+        label_0 = doc('label[for="id_cinder_jobs_to_resolve_0"]')
+        assert label_0.text() == (
+            '[Forwarded] "DSA: It violates Mozilla\'s Add-on Policies"\n'
             'Show detail on 1 reports\n'
-            'Reasoning: Why o why\n'
+            'Reasoning: Why o why; Zee de zee\n\n'
             'v[<script>alert()</script>]: ddd'
         )
         assert '<script>alert()</script>' not in content  # should be escaped
         assert '&lt;script&gt;alert()&lt;/script&gt' in content  # should be escaped
-        assert doc('label[for="id_resolve_cinder_jobs_1"]').text() == (
-            '[Appeal] "DSA: It violates Mozilla\'s Add-on Policies"'
-            '\nShow detail on 1 reports\nv[1.2]: ccc'
+        label_1 = doc('label[for="id_cinder_jobs_to_resolve_1"]')
+        assert label_1.text() == (
+            '[Appeal] "DSA: It violates Mozilla\'s Add-on Policies"\n'
+            'Show detail on 1 reports\n'
+            'Developer Appeal: some justification\n'
+            'Reporter Appeal: some other justification\n\n'
+            'v[1.2]: ccc'
         )
-        assert doc('label[for="id_resolve_cinder_jobs_2"]').text() == (
+        label_2 = doc('label[for="id_cinder_jobs_to_resolve_2"]')
+        assert label_2.text() == (
             '"DSA: It violates Mozilla\'s Add-on Policies"\n'
             'Show detail on 2 reports\n<no message>\nbbb'
         )
+
+        assert label_0.attr['class'] == 'data-toggle-hide'
+        assert label_0.attr['data-value'] == 'resolve_appeal_job'
+        assert label_1.attr['class'] == 'data-toggle-hide'
+        assert label_1.attr['data-value'] == 'resolve_reports_job'
+        assert label_2.attr['class'] == 'data-toggle-hide'
+        assert label_2.attr['data-value'] == 'resolve_appeal_job'
+
+    def test_cinder_policies_choices(self):
+        policy_exposed = CinderPolicy.objects.create(
+            uuid='1', name='foo', expose_in_reviewer_tools=True
+        )
+        CinderPolicy.objects.create(
+            uuid='2', name='baa', expose_in_reviewer_tools=False
+        )
+
+        form = self.get_form()
+        choices = form.fields['cinder_policies'].choices
+        qs_list = list(choices.queryset)
+        assert qs_list == [
+            # only policies that are expose_in_reviewer_tools=True should be included
+            policy_exposed
+        ]
+
+    def test_upload_attachment(self):
+        self.grant_permission(self.request.user, 'Addons:Review')
+        attachment = ContentFile('Pseudo File', name='attachment.txt')
+        data = {
+            'action': 'reply',
+            'comments': 'lol',
+            'versions': [self.version.pk],
+        }
+        files = {'attachment_file': attachment}
+
+        form = self.get_form(data=data, files=files)
+        assert form.is_valid()
+        assert not form.errors
+
+        data['attachment_input'] = 'whee'
+        form = self.get_form(data=data)
+        assert form.is_valid()
+        assert not form.errors
+
+        form = self.get_form(data=data, files=files)
+        assert not form.is_valid()
+        assert form.errors == {'__all__': ['Cannot upload both a file and input.']}

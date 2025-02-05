@@ -3,8 +3,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: AMO\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-05-14 15:43+0000\n"
-"PO-Revision-Date: 2024-05-11 10:55+0000\n"
+"POT-Creation-Date: 2025-02-03 14:26+0000\n"
+"PO-Revision-Date: 2025-02-03 17:30+0000\n"
 "Last-Translator: Olvcpr423 <oliverchan86@outlook.com>\n"
 "Language-Team: Chinese Simplified, China <LL@li.org>\n"
 "Language: zh_CN\n"
@@ -14,6 +14,9 @@ msgstr ""
 "Plural-Forms: nplurals=1; plural=0;\n"
 "Generated-By: Babel 2.2.0\n"
 "X-Generator: Pontoon\n"
+
+msgid "Mozilla Add-ons: {} [{}]"
+msgstr "Mozilla 附加组件：{} [{}]"
 
 msgid "Email address"
 msgstr "邮箱地址"
@@ -27,26 +30,17 @@ msgstr "申诉原因"
 msgid "Please explain why you believe that this decision was made in error, and/or does not align with the applicable policy or law."
 msgstr "请说明您认为此决定有误，或是与适用的政策、法律要求不符的原因。"
 
+msgid "User profile"
+msgstr "用户资料"
+
+msgid "\"{}\" for {}"
+msgstr "\"{}\" for {}"
+
 msgid "Please ensure this field has no more than {max_length} characters."
 msgstr "请确保此字段未超过 {max_length} 个字符。"
 
 msgid "Invalid value"
 msgstr "无效值"
-
-msgid "\"{}\" for {}"
-msgstr "\"{}\" for {}"
-
-msgid "User profile"
-msgstr "用户资料"
-
-msgid "Collection"
-msgstr "收藏集"
-
-msgid "Rating"
-msgstr "评分"
-
-msgid "Mozilla Add-ons: {} [{}]"
-msgstr "Mozilla 附加组件：{} [{}]"
 
 msgid "Appeal reviewer decision"
 msgstr "审核结果申诉"
@@ -68,7 +62,10 @@ msgid ""
 msgstr "我们已审核另一名举报者提出的类似申诉并撤销先前的决定。我们已根据我们的政策对内容和/或账户持有者采取行动。"
 
 msgid "Because the decision you are appealing has already been overturned, your appeal will not be processed."
-msgstr "由于您上诉的决定已经被推翻，因此您的上诉将不再被处理。"
+msgstr "由于您申诉的决定已经被推翻，因此您的申诉将不再被处理。"
+
+msgid "The decision you are appealing has already been overridden by a new decision, so this decision can't be appealed."
+msgstr "由于我们已作出新的决定，您无法再申诉此原决定。"
 
 msgid "This decision can't be appealed."
 msgstr "无法对此审核结果提出申诉。"
@@ -84,15 +81,16 @@ msgid ""
 "\n"
 "Thank you for your report about %(name)s on Mozilla Add-ons, and for providing more information about your concerns.\n"
 "\n"
-"After reviewing your appeal, we determined that the previous decision, that this content does not violate Mozilla’s policies (%(policy_document_url)s), was correct. Based on that determination, we "
-"have denied your appeal, and will not take any action against the account or the content.\n"
+"After reviewing your appeal, we determined that the previous decision, that this content does not violate Mozilla’s policies (%(policy_document_url)s), was correct. Based on that determination, we have denied your appeal, and will not take any action against the account or the content.\n"
+"%(manual_reasoning_text)s.\n"
 "\n"
 "Thank you for your attention.\n"
 msgstr ""
 "\n"
 "感谢您举报 Mozilla 附加组件站上的“%(name)s”并提供更多相关信息。\n"
 "\n"
-"在审核您的申诉后，我们确定我们此前的决定正确无误，即该内容并没有违反 Mozilla 的政策（%(policy_document_url)s）。据此，我们驳回了您的申诉，并将不会对该账户和内容采取任何行动。\n"
+"在审核您的申诉后，我们确定我们此前的决定正确无误，即该内容并没有违反 Mozilla 的政策（%(policy_document_url)s）。据此，我们驳回了您的申诉，并将不会对该账户和内容采取任何措施。\n"
+"%(manual_reasoning_text)s。\n"
 "\n"
 "感谢您的关注。\n"
 
@@ -101,8 +99,7 @@ msgid ""
 "\n"
 "Thank you for your report about %(name)s on Mozilla Add-ons, and for providing more information about your concerns.\n"
 "\n"
-"After reviewing your appeal, we have determined that our prior decision, that this content does not violate Mozilla's policies (%(policy_document_url)s), was incorrect. Based on that determination, "
-"we have removed the content, and notified the user of our action.\n"
+"After reviewing your appeal, we have determined that our prior decision, that this content does not violate Mozilla's policies (%(policy_document_url)s), was incorrect. Based on that determination, we have removed the content, and notified the user of our action.\n"
 msgstr ""
 "\n"
 "感谢您举报 Mozilla 附加组件站上的“%(name)s”并提供更多相关信息。\n"
@@ -114,8 +111,7 @@ msgid ""
 "\n"
 "Thank you for your report about %(name)s on Mozilla Add-ons, and for providing more information about your concerns.\n"
 "\n"
-"After reviewing your appeal, we have determined that our prior decision, that this content does not violate Mozilla's policies (%(policy_document_url)s), was incorrect. Based on that determination, "
-"we have requested the developer make changes. If they do not update their content to correct the violation, we will remove it.\n"
+"After reviewing your appeal, we have determined that our prior decision, that this content does not violate Mozilla's policies (%(policy_document_url)s), was incorrect. Based on that determination, we have requested the developer make changes. If they do not update their content to correct the violation, we will remove it.\n"
 msgstr ""
 "\n"
 "感谢您举报 Mozilla 附加组件站上的“%(name)s”并提供更多相关信息。\n"
@@ -130,9 +126,9 @@ msgid ""
 "We reviewed your report and the content in question, and found that it does not violate Mozilla's policies (%(policy_document_url)s).  It will therefore not be subject to any moderation action.\n"
 msgstr ""
 "\n"
-"感谢您在 %(target_url)s 对 %(name)s 的举报。\n"
+"感谢您举报 %(target_url)s 上的“%(name)s”。\n"
 "\n"
-"我们审阅了您的举报及质疑内容，并确定其没有违反 Mozilla (%(policy_document_url)s) 的政策。因此我们不会被采取任何管理操作。\n"
+"我们审核了您的举报及质疑的内容，认为其没有违反 Mozilla 的政策（%(policy_document_url)s）。因此，我们不会对其采取管理措施。\n"
 
 #, python-format
 msgid ""
@@ -157,8 +153,7 @@ msgid ""
 "\n"
 "Thank you for your report about the following add-on on Mozilla Add-ons: %(name)s.\n"
 "\n"
-"We reviewed your report and the content in question, and found that it violates Mozilla's policies (%(policy_document_url)s), and have therefore requested the developer make changes. If they do not "
-"update their content to correct the violation, we will remove it.\n"
+"We reviewed your report and the content in question, and found that it violates Mozilla's policies (%(policy_document_url)s), and have therefore requested the developer make changes. If they do not update their content to correct the violation, we will remove it.\n"
 msgstr ""
 "\n"
 "感谢您向 Mozilla 举报 Mozilla 附加组件站中的下列附加组件：%(name)s。\n"
@@ -237,11 +232,11 @@ msgstr[0] "版本 {0}"
 msgid "Review note"
 msgstr "审核说明"
 
-msgid "Only latest versions of addons can have notes added."
-msgstr "仅最新版的 addons 可添加说明。"
-
 msgid "Request content length is too large."
 msgstr "请求内容过长。"
+
+msgid "Add-on uploads are temporarily unavailable."
+msgstr "暂时无法上传附加组件。"
 
 msgid "Maximum number of categories per application ({MAX_CATEGORIES}) exceeded"
 msgstr "超出单个应用程序的最大分类数（{MAX_CATEGORIES}）"
@@ -293,9 +288,6 @@ msgstr "显示"
 
 msgid "Add-on and collection paths need to end with \"/\""
 msgstr "附加组件和收藏集的路径需要以“/”结尾"
-
-msgid "Previews cannot be created for themes."
-msgstr "无法创建主题预览。"
 
 msgid "Built in licenses can not be updated."
 msgstr "无法更新内置许可证。"
@@ -381,6 +373,9 @@ msgstr "由于此版本已通过 Mozilla 审核，无法更改源文件。"
 msgid "This type of add-on does not allow custom compatibility."
 msgstr "此类型的附加组件不允许自定义兼容性。"
 
+msgid "This endpoint is not valid for Themes."
+msgstr "此端点对主题无效。"
+
 msgid "My Add-ons"
 msgstr "我的附加组件"
 
@@ -441,6 +436,9 @@ msgstr "CIDR"
 msgid "Some features are temporarily disabled while we perform website maintenance. We'll be back to full capacity shortly."
 msgstr "在我们进行网站维护时，某些功能会被暂时禁用。我们将尽快复原。"
 
+msgid "URLs are not allowed."
+msgstr "不允许使用网址。"
+
 msgid "Must contain at least one printable character."
 msgstr "至少须包含一个可打印字符。"
 
@@ -484,10 +482,9 @@ msgid ""
 "website.</p> <ul> <li>Are you interested in a <a href=\"%(rec)s\">list of featured add-ons</a>?</li> <li> Do you want to <a href=\"%(search)s\">search for add-ons</a>? You may go to the <a "
 "href=\"%(search)s\">search page</a> or just use the search field above. </li> <li> If you prefer to start over, just go to the <a href=\"%(home)s\">add-ons front page</a>. </li> </ul>"
 msgstr ""
-"<h1>非常抱歉，我们找不到您要找的内容。</h1> <p>您请求的页面或文件在我们的网站上没有找到。这可能是因为您点击了一个过期的链接，或者输入了不正确的网址。</p> <ul> <li>如果您是在地址栏里输入的网址，请检"
-"查一下确保没有拼写错误。</li> <li>如果您点击某个链接而来，可能是由于我们的疏忽，请%(open_bug_link)s填报问题%(close_bug_link)s。填报时请提及您是从哪个网址过来的、想访问什么内容，我们将修正此问题。</"
-"li> </ul> <p>要不转到网站其他地方逛逛吧。</p> <ul> <li>您对我们的<a href=\"%(rec)s\">精选附加组件</a>有兴趣吗？</li> <li>您想<a href=\"%(search)s\">搜索附加组件</a>吗？您可以转到<a "
-"href=\"%(search)s\">搜索页面</a>，或者就用上面的搜索框进行搜索。</li> <li>如果没有确定的目标，就从<a href=\"%(home)s\">附加组件首页</a>开始吧。</li> </ul>"
+"<h1>非常抱歉，我们找不到您要找的内容。</h1> <p>您请求的页面或文件在我们的网站上没有找到。这可能是因为您点击了一个过期的链接，或者输入了不正确的网址。</p> <ul> <li>如果您是在地址栏里输入的网址，请检查一下确保没有拼写错误。</li> "
+"<li>如果您点击某个链接而来，可能是由于我们的疏忽，请%(open_bug_link)s填报问题%(close_bug_link)s。填报时请提及您是从哪个网址过来的、想访问什么内容，我们将修正此问题。</li> </ul> <p>要不转到网站其他地方逛逛吧。</p> <ul> <li>您对我们的<a href=\"%(rec)s\">精选附加组件</a>有兴趣吗？</li> "
+"<li>您想<a href=\"%(search)s\">搜索附加组件</a>吗？您可以转到<a href=\"%(search)s\">搜索页面</a>，或者就用上面的搜索框进行搜索。</li> <li>如果没有确定的目标，就从<a href=\"%(home)s\">附加组件首页</a>开始吧。</li> </ul>"
 
 msgid "Oops"
 msgstr "哎呀"
@@ -496,9 +493,7 @@ msgstr "哎呀"
 msgid ""
 "<h1>Oops! We had an error.</h1> <p>We'll get to fixing that soon.</p> <p> You can try refreshing the page, or head back to the <a href=\"%(home)s\">Add-ons homepage</a>. You can also help us fix "
 "this by <a href=\"https://github.com/mozilla/addons/issues/new\">filing an issue</a> with the details of how you got to this page. </p>"
-msgstr ""
-"<h1>糟糕！出错了。</h1> <p>我们将尽快修复这个问题。</p> <p> 您可以尝试刷新页面或返回<a href=\"%(home)s\">附加组件首页</a>。 您也可以通过<a href=\"https://github.com/mozilla/addons/issues/new\">提交 "
-"Issue</a> 并详细说明如何进入此页面，来帮助我们修复它。</p>"
+msgstr "<h1>糟糕！出错了。</h1> <p>我们将尽快修复这个问题。</p> <p> 您可以尝试刷新页面或返回<a href=\"%(home)s\">附加组件首页</a>。 您也可以通过<a href=\"https://github.com/mozilla/addons/issues/new\">提交 Issue</a> 并详细说明如何进入此页面，来帮助我们修复它。</p>"
 
 msgid "Register or Log in"
 msgstr "注册或登录"
@@ -507,7 +502,7 @@ msgid "Email:"
 msgstr "邮箱："
 
 msgid "Two-factor authentication"
-msgstr "双因子验证"
+msgstr "双因子身份验证"
 
 #. abbreviation of 'previous'
 msgid "Prev"
@@ -528,6 +523,12 @@ msgstr "我们正在进行网站维护，这个功能暂时无法使用，请使
 
 msgid "Some features on this page are temporarily disabled while we perform website maintenance. Please try again a little later."
 msgstr "我们正在进行网站维护，本页面中的部分功能暂时无法使用，请稍后再试。"
+
+msgid "Add-on uploads temporarily disabled"
+msgstr "暂时不允许上传附加组件"
+
+msgid "Add-on uploads have been temporarily disabled. Please check back later."
+msgstr "暂时不允许上传附加组件，请稍后再试。"
 
 # {0} is the application the user is browsing.  Examples:  Thunderbird,
 # Firefox,
@@ -621,6 +622,12 @@ msgstr "不能使用此自定义网址。"
 msgid "This add-on already belongs to the collection"
 msgstr "此附加组件已在收藏集中"
 
+msgid "Blocked"
+msgstr "已阻止"
+
+msgid "Restricted"
+msgstr "已受限"
+
 msgid "{addon} was created."
 msgstr "{addon} 已创建。"
 
@@ -694,12 +701,6 @@ msgstr "{addon} {version} 已被保留。"
 msgid "Retained"
 msgstr "已被保留"
 
-msgid "{addon} {version} escalated."
-msgstr "{addon} {version} 已向上呈报。"
-
-msgid "Super review requested"
-msgstr "已要求高级审核"
-
 msgid "{addon} {version} review requested."
 msgstr "{addon} {version} 已申请审核。"
 
@@ -712,14 +713,8 @@ msgstr "{addon} {version} 被要求更多信息。"
 msgid "More information requested"
 msgstr "要求更多信息"
 
-msgid "{addon} {version} super review requested."
-msgstr "{addon} {version} 已要求高级审核。"
-
 msgid "The add-on has been flagged for Admin Review. It's still in our review queue, but it will need to be checked by one of our admin reviewers. The review might take longer than usual."
 msgstr "此附加组件已被标记为管理员审核。它仍处于我们的审核队列，但需要由我们的管理员进行审查。审核可能比平时消耗更多时间。"
-
-msgid "Commented"
-msgstr "已留言"
 
 msgid "{tag} added to {addon}."
 msgstr "{addon} 已添加标签 {tag}。"
@@ -735,20 +730,6 @@ msgstr "{addon} 已从 {collection} 中移除。"
 
 msgid "{rating} for {addon} written."
 msgstr "{addon} 的 {rating} 已撰写。"
-
-#. L10n: {0} is a category name.
-msgid "{addon} featured in {0}."
-msgstr "{addon} 已精选到分类 {0}。"
-
-#. L10n: {0} is a category name.
-msgid "{addon} no longer featured in {0}."
-msgstr "{addon} 已从分类 {0} 精选中移除。"
-
-msgid "{addon} is now featured."
-msgstr "{addon} 已成为精选附加组件。"
-
-msgid "{addon} is no longer featured."
-msgstr "{addon} 不再是精选项目。"
 
 #. L10n: {0} is the application, {1} is the version of the app
 msgid "{0} {1} added."
@@ -797,45 +778,21 @@ msgstr "账户已更新。"
 msgid "Account {user} deleted."
 msgstr "账户 {user} 已删除。"
 
-msgid "Created: {0}."
-msgstr "已创建：{0}。"
-
-msgid "Edited field: {2} set to: {0}."
-msgstr "已编辑字段：{2} 设置为：{0}。"
-
-msgid "Deleted: {1}."
-msgstr "已删除：{1}。"
-
 msgid "{rating} for {addon} updated."
 msgstr "{addon} 的 {rating} 已更新。"
 
 msgid "{addon} reviewed."
 msgstr "{addon} 已审核。"
 
-msgid "User {user} banned."
-msgstr "已封禁用户 {user}。"
-
-msgid "User {user} picture deleted."
-msgstr "已删除用户 {user} 的照片。"
-
-msgid "User {user} added to {group}."
-msgstr "{group} 已添加 {user}。"
-
-msgid "User {user} removed from {group}."
-msgstr "{group} 已移除 {user}。"
-
 msgid "{addon} unlisted."
 msgstr "{addon} 已下架。"
-
-msgid "{file} was signed."
-msgstr "{file} 已签名。"
 
 #. L10n: {0} is the add-on GUID.
 msgid "Add-on id {0} with GUID {1} has been deleted"
 msgstr "已删除 id 为 {0} 且 GUID 为 {1} 的附加组件"
 
-msgid "{addon} migrated from preliminary."
-msgstr "{addon} 已从初步审核迁移。"
+msgid "{file} was signed."
+msgstr "{file} 已签名。"
 
 msgid "Reply by developer on {addon} {version}."
 msgstr "开发者在 {addon} {version} 时回复。"
@@ -861,53 +818,17 @@ msgstr "{addon} {version} 的源代码已上传。"
 msgid "Source code uploaded"
 msgstr "源代码已上传"
 
-msgid "{addon} {version} auto-approval confirmed."
-msgstr "已确认 {addon} {version} 自动通过审核。"
-
-msgid "Auto-Approval confirmed"
-msgstr "自动批准已确认"
-
 msgid "{addon} {version} re-enabled."
 msgstr "{addon} {version} 已重新启用。"
 
 msgid "{addon} {version} disabled."
 msgstr "{addon} {version} 已禁用。"
 
-msgid "{addon} {version} content approved."
-msgstr "{addon} {version} 内容已通过审核。"
-
-msgid "Content approved"
-msgstr "内容已通过审核"
-
 msgid "{addon} {version} content rejected."
 msgstr "{addon} {version} 内容被驳回。"
 
 msgid "Content rejected"
 msgstr "内容被驳回"
-
-msgid "{addon} information request altered or removed by admin."
-msgstr "管理员已更改或移除要求 {addon} 提供更多信息的请求。"
-
-msgid "Information request altered"
-msgstr "信息请求已更改"
-
-msgid "Information request cleared by developer on {addon} {version}."
-msgstr "开发者已清除在 {addon} {version} 的信息请求。"
-
-msgid "Information request removed"
-msgstr "信息请求已移除"
-
-msgid "{addon} {version} admin add-on-review requested."
-msgstr "{addon} {version} 已要求管理员进行附加组件审核。"
-
-msgid "Admin add-on-review requested"
-msgstr "已要求管理员进行附加组件审核"
-
-msgid "{addon} {version} admin content-review requested."
-msgstr "{addon} {version} 已要求管理员进行内容审核。"
-
-msgid "Admin content-review requested"
-msgstr "已要求管理员进行内容审核"
 
 msgid "{addon} {version} admin theme-review requested."
 msgstr "{addon} {version} 已要求管理员进行主题审核。"
@@ -917,42 +838,6 @@ msgstr "已要求管理员进行主题审核"
 
 msgid "{addon} was migrated from a lightweight theme."
 msgstr "{addon} 迁移自轻量级主题。"
-
-msgid "User {user} api key reset."
-msgstr "已重置用户 {user} 的密钥。"
-
-msgid "Block for {0} added to Blocklist."
-msgstr "已将对 {0} 的屏蔽添加至屏蔽列表。"
-
-msgid "Block added"
-msgstr "已新建屏蔽项"
-
-msgid "Block for {0} edited in Blocklist."
-msgstr "已编辑屏蔽列表中对 {0} 的屏蔽。"
-
-msgid "Block edited"
-msgstr "已编辑屏蔽项"
-
-msgid "Block for {0} deleted from Blocklist."
-msgstr "已删除屏蔽列表中对 {0} 的屏蔽。"
-
-msgid "Block deleted"
-msgstr "已删除屏蔽项目"
-
-msgid "GUID for {addon} added to DeniedGuid."
-msgstr "已将 {addon} 的 GUID 添加至 DeniedGuid。"
-
-msgid "GUID for {addon} removed from DeniedGuid."
-msgstr "已将 {addon} 的 GUID 从 DeniedGuid 移除。"
-
-msgid "Block {1} action for {0} signed off."
-msgstr "确认对 {0} 的 {1} 操作。"
-
-msgid "Block action signoff"
-msgstr "确认屏蔽操作"
-
-msgid "User {user} session(s) reset."
-msgstr "已重置用户 {user} 的会话。"
 
 msgid "{addon} {version} content reject scheduled."
 msgstr "已安排驳回 {addon} {version} 内容。"
@@ -993,24 +878,6 @@ msgstr "{addon} {version} 待驳回已清空。"
 msgid "Pending rejection cleared"
 msgstr "待驳回已清空"
 
-msgid "{version} added to Blocklist."
-msgstr "{version} 已加入屏蔽列表。"
-
-msgid "Version Blocked"
-msgstr "版本已屏蔽"
-
-msgid "{version} removed from Blocklist."
-msgstr "{version} 已从屏蔽列表移除。"
-
-msgid "Version Unblocked"
-msgstr "版本已解除屏蔽"
-
-msgid "{addon} {version} admin add-on-review cleared."
-msgstr "{addon} {version} 管理员的附加组件评审已清除。"
-
-msgid "Admin add-on-review cleared"
-msgstr "管理员附加组件评论已清除"
-
 msgid "{user_responsible} changed {addon} slug from {0} to {1}."
 msgstr "{user_responsible} 已将“{addon}”的网址缩略名由“{0}”更改为“{1}”。"
 
@@ -1026,11 +893,23 @@ msgstr "收藏集 {collection} 已被管理员撤销删除"
 msgid "Review {rating} for {addon} un-deleted."
 msgstr "已取消删除对“{addon}”的评论“{rating}”。"
 
-msgid "User {user} content restored."
-msgstr "已恢复用户“{user}”的内容。"
+msgid "{addon} {version} rejected automatically after delay expired."
+msgstr "{addon} {version} 已在延迟到期后被自动驳回。"
 
-msgid "User {user} unbanned."
-msgstr "已解封用户“{user}”。"
+msgid "Rejected automatically after delay expired"
+msgstr "延迟期满后自动驳回"
+
+msgid "{addon} {version} content rejected automatically after delay expired."
+msgstr "{addon} {version} 内容在延迟期满后被自动驳回。"
+
+msgid "Content rejected automatically after delay expired"
+msgstr "内容在延迟期满后被自动驳回"
+
+msgid "{addon} {version} pending rejection changed."
+msgstr "{addon} {version} 待驳回已更改。"
+
+msgid "Pending rejection changed"
+msgstr "待驳回已更改"
 
 msgid "Firefox"
 msgstr "Firefox"
@@ -1148,14 +1027,6 @@ msgstr "主题"
 
 msgid "Deprecated Site Permissions"
 msgstr "已弃用的网站权限"
-
-msgid "Accessibility"
-msgstr "辅助功能"
-
-msgid ""
-"Download Firefox accessibility extensions to help you consume content and navigate online in ways that work best for you. Discover extensions that remove or reduce barriers to access by changing "
-"screen brightness, reading web pages aloud, providing precision magnification, and more."
-msgstr "下载 Firefox 的辅助功能扩展，以帮助您通过最适合自己的方式来获取内容和浏览网络。探索通过各种功能来消除或降低使用障碍的扩展，例如更改屏幕亮度、朗读及放大网页内容。"
 
 msgid "Alerts & Updates"
 msgstr "提醒和更新"
@@ -1337,23 +1208,32 @@ msgstr "一般"
 msgid "Mozilla Public License 2.0"
 msgstr "Mozilla 公共许可证 2.0"
 
-msgid "GNU General Public License v2.0"
-msgstr "GNU 通用公共许可证 v2.0"
+msgid "Apache License 2.0"
+msgstr "Apache 许可证 2.0"
 
-msgid "GNU General Public License v3.0"
-msgstr "GNU 通用公共许可证 v3.0"
+msgid "GNU General Public License v2.0 only"
+msgstr "仅 GNU 通用公共许可证 v2.0"
 
-msgid "GNU Library General Public License v2.1"
-msgstr "GNU 库通用公共许可证 v2.1"
+msgid "GNU General Public License v3.0 only"
+msgstr "仅 GNU 通用公共许可证 v3.0"
 
-msgid "GNU Library General Public License v3.0"
-msgstr "GNU 库通用公共许可证 v3.0"
+msgid "GNU Lesser General Public License v2.1 only"
+msgstr "仅 GNU 宽通用公共许可证 v2.1"
 
-msgid "The MIT License"
+msgid "GNU Lesser General Public License v3.0 only"
+msgstr "仅 GNU 宽通用公共许可证 v3.0"
+
+msgid "GNU Affero General Public License v3.0 only"
+msgstr "仅 GNU Affero 通用公共许可证 v3.0"
+
+msgid "MIT License"
 msgstr "MIT 许可证"
 
-msgid "The BSD License"
-msgstr "BSD 许可证"
+msgid "ISC License"
+msgstr "ISC 许可证"
+
+msgid "BSD 2-Clause \"Simplified\" License"
+msgstr "BSD 双条款“简化”版许可证"
 
 msgid "Mozilla Public License 1.1"
 msgstr "Mozilla 公共许可证 1.1"
@@ -1379,17 +1259,32 @@ msgstr "知识共享“署名-禁止演绎 3.0”"
 msgid "Creative Commons Attribution-ShareAlike 3.0"
 msgstr "知识共享“署名-相同方式共享 3.0”"
 
+msgid "Creative Commons Attribution 4.0"
+msgstr "知识共享署名 4.0"
+
+msgid "Creative Commons Attribution-NonCommercial 4.0"
+msgstr "知识共享署名—非商业性使用 4.0"
+
+msgid "Creative Commons Attribution-NonCommercial-NoDerivs 4.0"
+msgstr "知识共享署名—非商业性使用—禁止演绎 4.0"
+
+msgid "Creative Commons Attribution-NonCommercial-Share Alike 4.0"
+msgstr "知识共享署名—非商业性使用—相同方式共享 4.0"
+
+msgid "Creative Commons Attribution-NoDerivs 4.0"
+msgstr "知识共享署名—禁止演绎 4.0"
+
+msgid "Creative Commons Attribution-ShareAlike 4.0"
+msgstr "知识共享署名—相同方式共享 4.0"
+
+msgid "The Unlicense"
+msgstr "零约束许可证"
+
 msgid "Not Promoted"
 msgstr "未推广"
 
 msgid "Recommended"
 msgstr "推荐"
-
-msgid "Sponsored"
-msgstr "赞助推广"
-
-msgid "Verified"
-msgstr "已验证"
 
 msgid "By Firefox"
 msgstr "Firefox 出品"
@@ -1503,9 +1398,7 @@ msgstr "Manifest V3 兼容性警告"
 msgid ""
 "Firefox is adding support for manifest version 3 (MV3) extensions in Firefox {version}, however, older versions of Firefox are only compatible with manifest version 2 (MV2) extensions. We recommend "
 "uploading Manifest V3 extensions as self-hosted for now to not break compatibility for your users."
-msgstr ""
-"Firefox 在 {version} 版本中添加了对 manifest 版本 3（MV3）扩展的支持，但是，旧版本的 Firefox 仅兼容 manifest 版本 2（MV2）扩展。我们建议暂时以自托管方式上传 Manifest V3 扩展，以免破坏用户方面的兼容"
-"性。"
+msgstr "Firefox 在 {version} 版本中添加了对 manifest 版本 3（MV3）扩展的支持，但是，旧版本的 Firefox 仅兼容 manifest 版本 2（MV2）扩展。我们建议暂时以自托管方式上传 Manifest V3 扩展，以免破坏用户方面的兼容性。"
 
 msgid "For more information about the MV3 extension roll-out or self-hosting MV3 extensions, visit https://mzl.la/3hIwQXX"
 msgstr "有关推出或自托管 MV3 扩展的更多信息，请访问 https://mzl.la/3hIwQXX"
@@ -1630,12 +1523,45 @@ msgstr "在此网站上。<span class=\"helptext\">您提交的内容会在 {sit
 msgid ""
 "On your own. <span class=\"helptext\">After your submission is signed by Mozilla, you can download the .xpi file from the Developer Hub and distribute it to your audience. Please make sure the add-"
 "on manifest’s <a {a_attrs}>update_url</a> is provided, as this is the URL where Firefox finds updates for automatic deployment to your users.</span>"
-msgstr ""
-"由您自己托管。<span class=\"helptext\">提交的内容由 Mozilla 签名后，可在开发者中心下载 .xpi 文件，自行分发给您的用户。请确保附加组件中指定了 <a {a_attrs}>update_url</a>，Firefox 会定期连接到此网址检"
-"查并自动更新。</span>"
+msgstr "由您自己托管。<span class=\"helptext\">提交的内容由 Mozilla 签名后，可在开发者中心下载 .xpi 文件，自行分发给您的用户。请确保附加组件中指定了 <a {a_attrs}>update_url</a>，Firefox 会定期连接到此网址检查并自动更新。</span>"
 
 msgid "Display Name"
 msgstr "显示名称"
+
+msgid "Confirm email address"
+msgstr "确认邮箱地址"
+
+msgid "Generate new credentials"
+msgstr "生成新凭据"
+
+msgid "Revoke and regenerate credentials"
+msgstr "吊销并重新生成凭据"
+
+msgid "Revoke"
+msgstr "吊销"
+
+msgid "JWT issuer"
+msgstr "JWT 签发者"
+
+msgid ""
+"To make API requests, send a <a href=\"{jwt_url}\">JSON Web Token (JWT)</a> as the authorization header. You'll need to generate a JWT for every request as explained in the <a "
+"href=\"{docs_url}\">API documentation</a>."
+msgstr "若要执行 API 请求，请发送一条 <a href=\"{jwt_url}\">JSON Web Token（JWT）</a>作为身份校验头。您需要按照 <a href=\"{docs_url}\">API 文档</a> 的要求，为每个请求生成一个 JWT。"
+
+msgid "JWT secret"
+msgstr "JWT 私钥"
+
+msgid "Please click the confirm button below to generate API credentials for user <strong>{name}</strong>."
+msgstr "请点击下方的确认按钮，为用户“<strong>{name}</strong>”生成 API 凭据。"
+
+msgid "A confirmation link will be sent to your email address. After confirmation you will find your API keys on this page."
+msgstr "确认链接将发送到您的电子邮件地址。确认后，您将在此页面找到您的 API 密钥。"
+
+msgid "You don't have any API credentials."
+msgstr "您没有任何 API 凭据。"
+
+msgid "Something went wrong, please contact developer support."
+msgstr "出了点问题，请联系开发者支持人员。"
 
 msgid "Invalid or corrupt add-on file."
 msgstr "无效或损坏的附加组件文件。"
@@ -1667,6 +1593,9 @@ msgstr "创建日期"
 
 msgid "Downloads"
 msgstr "下载次数"
+
+msgid "Rating"
+msgstr "评分"
 
 msgid "All My Add-ons"
 msgstr "我的所有附加组件"
@@ -1717,7 +1646,7 @@ msgid "Validate Add-on"
 msgstr "验证附加组件"
 
 msgid "<a href=\"{link}\">Please add two-factor authentication to your account to submit extensions.</a>"
-msgstr "<a href=\"{link}\">若要提交扩展，请先为账户添加双因子验证。</a>"
+msgstr "<a href=\"{link}\">若要提交扩展，请先为账户添加双因子身份验证。</a>"
 
 msgid "Icons must be either PNG or JPG."
 msgstr "图标必须为 PNG 或 JPG 格式。"
@@ -1802,6 +1731,9 @@ msgstr "标签页高亮"
 msgid "The highlight color of the active tab. Implemented as a border around the tab on Firefox 89+ and a line above the tab on older Firefoxes. Manifest field:  tab_line."
 msgstr "高亮活动的标签页。在 Firefox 89+ 上显示为标签页周围的边框（旧版上会显示为顶端的横线）。清单字段：tab_line。"
 
+msgid "Add-on uploads are temporarily unavailable"
+msgstr "暂时无法上传附加组件"
+
 msgid "Review requested."
 msgstr "已请求审核。"
 
@@ -1810,6 +1742,9 @@ msgstr "您必须提供进一步的详细信息才能继续。"
 
 msgid "Your old credentials were revoked and are no longer valid."
 msgstr "您的旧凭据已被吊销并且不再有效。"
+
+msgid "Keep your API keys secret and never share them with anyone, including Mozilla contributors."
+msgstr "请保密您的 API 密钥，绝对不要分享给其他人，包括 Mozilla 贡献者。"
 
 msgid "New API key created"
 msgstr "新的 API 密钥已创建"
@@ -1972,7 +1907,7 @@ msgstr "刷新结果"
 
 #, python-format
 msgid "If you encounter issues, please see our <a %(a_attrs)s>troubleshooting suggestions</a> on Firefox Extension Workshop."
-msgstr ""
+msgstr "如遇问题，请到 Firefox 扩展工坊参考我们的<a %(a_attrs)s>疑难解答建议</a>。"
 
 msgid "Recent Activity for My Add-ons"
 msgstr "我的附加组件的近期动态"
@@ -2074,9 +2009,7 @@ msgstr "保存更改"
 msgid ""
 "<p>Add-ons can have any number of authors with 2 possible roles:</p> <ul> <li><b>Owner:</b> Can manage all aspects of the add-on's listing, including adding and removing other authors</li> "
 "<li><b>Developer:</b> Can manage all aspects of the add-on's listing, except for adding and removing other authors</li> </ul>"
-msgstr ""
-"<p>附加组件可以有任意位作者，每位作者的身份有两种可选：</p> <ul> <li><b>所有者：</b>可以全面的管理附加组件的各项信息，包括添加和移除其他作者</li> <li><b>开发者：</b>可以全面的管理附加组件的各项信"
-"息，但不能添加和移除其他作者</li></ul>"
+msgstr "<p>附加组件可以有任意位作者，每位作者的身份有两种可选：</p> <ul> <li><b>所有者：</b>可以全面的管理附加组件的各项信息，包括添加和移除其他作者</li> <li><b>开发者：</b>可以全面的管理附加组件的各项信息，但不能添加和移除其他作者</li></ul>"
 
 msgid "Close"
 msgstr "关闭"
@@ -2197,8 +2130,8 @@ msgid "Email"
 msgstr "电子邮件"
 
 msgid ""
-"If you wish to display an e-mail address for support inquiries, enter it here. If you have different addresses for each language multiple translations of this field can be added. It is only "
-"relevant for listed add-ons."
+"If you wish to display an e-mail address for support inquiries, enter it here. If you have different addresses for each language multiple translations of this field can be added. It is only relevant"
+" for listed add-ons."
 msgstr "如果您想显示一个电子邮件地址供支持请求，请在这里输入。如果您想对不同的语言显示不同的电子邮件地址，您也可以在这里添加多个语言的字段。此项仅与公开上架的附加组件相关。"
 
 msgid "Website"
@@ -2240,8 +2173,8 @@ msgid "Whiteboard"
 msgstr "白板"
 
 msgid ""
-"The whiteboard is the place to provide information relevant to your add-on, whatever the version, to the reviewers. Use it to provide ways to test the add-on, and any additional information that "
-"may help. This whiteboard is also editable by reviewers."
+"The whiteboard is the place to provide information relevant to your add-on, whatever the version, to the reviewers. Use it to provide ways to test the add-on, and any additional information that may"
+" help. This whiteboard is also editable by reviewers."
 msgstr "白板是用来放置您要提供给网站编辑的有关于您的附加组件的信息，不局限于特定版本。请使用它来提供测试附加组件的方法或其他任何可帮助测试的额外信息。此白板也可被网站编辑所编辑。"
 
 msgid "Add-on Media for {0}"
@@ -2645,6 +2578,10 @@ msgid "Source files (aside from open-source third party libraries) cannot be tra
 msgstr "源文件（不含第三方开源库）请勿转译（transpile）、拼接（concatenate）、压缩（minify）或使用机器生成源代码。"
 
 #, python-format
+msgid "The maximum file size accepted is %(max_size)s."
+msgstr "接受的最大文件大小为 %(max_size)s。"
+
+#, python-format
 msgid "For more information, please read <a %(a_attrs)s>Source Code Submission</a> on Firefox Extension Workshop."
 msgstr "若需更多信息，请阅读 Firefox 扩展工坊的 <a %(a_attrs)s>Source Code Submission</a> 一文。"
 
@@ -2668,6 +2605,10 @@ msgstr "上传版本"
 
 msgid "Use the fields below to upload your add-on package. After upload, a series of automated validation tests will be run on your file."
 msgstr "使用下面的按钮上传您的附加组件包。在上传完成后，将会对您的文件执行一系列自动化验证测试。"
+
+#, python-format
+msgid "The maximum file size accepted is %(max_size)s. If your add-on is larger than %(max_size)s, it will fail validation."
+msgstr "接受的最大文件大小为 %(max_size)s。大小超过 %(max_size)s 的附加组件将无法通过验证。"
 
 msgid "Which applications is this version compatible with?"
 msgstr "此版本与哪个（些）应用程序兼容？"
@@ -2731,47 +2672,6 @@ msgstr "返回"
 
 msgid "API Credentials"
 msgstr "API 凭据"
-
-#, python-format
-msgid "For detailed instructions, consult the <a href=\"%(docs_url)s\">API documentation</a>."
-msgstr "详细的操作说明请查阅 <a href=\"%(docs_url)s\">API 文档</a>。"
-
-msgid "Keep your API keys secret and <strong>never share them with anyone</strong>, including Mozilla contributors."
-msgstr "请不要透露您的 API 密钥并且<strong>永远不要分享给其他人</strong>，包括 Mozilla 员工。"
-
-msgid "JWT issuer"
-msgstr "JWT 签发者"
-
-msgid "JWT secret"
-msgstr "JWT 私钥"
-
-#, python-format
-msgid ""
-"To make API requests, send a <a href=\"%(jwt_url)s\">JSON Web Token (JWT)</a> as the authorization header. You'll need to generate a JWT for every request as explained in the <a "
-"href=\"%(docs_url)s\">API documentation</a>."
-msgstr "要执行 API 请求，发送一条 <a href=\"%(jwt_url)s\">JSON Web Token (JWT)</a> 作为身份校验头。您需要按照 <a href=\"%(docs_url)s\">API 文档</a> 的要求，为每个请求生成一个 JWT。"
-
-#, python-format
-msgid "Please click the confirm button below to generate API credentials for user <strong>%(name)s</strong>."
-msgstr "请点击下方的确认按钮，为用户 <strong>%(name)s</strong> 生成 API 密钥。"
-
-msgid "A confirmation link will be sent to your email address. After confirmation you will find your API keys on this page."
-msgstr "确认链接将发送到您的电子邮件地址。确认后，您将在此页面找到您的 API 密钥。"
-
-msgid "You don't have any API credentials."
-msgstr "您没有任何 API 凭据。"
-
-msgid "Revoke"
-msgstr "吊销"
-
-msgid "Revoke and regenerate credentials"
-msgstr "吊销并重新生成凭据"
-
-msgid "Confirm and generate new credentials"
-msgstr "确认并生成新密钥"
-
-msgid "Generate new credentials"
-msgstr "生成新凭据"
 
 #, python-format
 msgid ""
@@ -2847,8 +2747,7 @@ msgid ""
 "We noticed that your secret AMO API credentials were included in an add-on submitted to addons.mozilla.org. In order to protect your account and your add-on(s), we revoked the leaked credentials.\n"
 "You can generate new API credentials at %(api_keys_url)s\n"
 "\n"
-"Please make sure you never share your credentials with anyone. Never include them in a public repository, add-on or any other public place. We encourage you to review your code repositories and "
-"your extensions to remove any references to your AMO credentials.\n"
+"Please make sure you never share your credentials with anyone. Never include them in a public repository, add-on or any other public place. We encourage you to review your code repositories and your extensions to remove any references to your AMO credentials.\n"
 "\n"
 "Thank you,\n"
 "The Mozilla Add-ons team"
@@ -2992,11 +2891,11 @@ msgid "Firefox for Android compatibility"
 msgstr "Android 版 Firefox 兼容性"
 
 msgid ""
-"Did you test your extension to ensure it works as expected on Firefox for Android? If not, please see <a target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://extensionworkshop.com/"
-"documentation/develop/developing-extensions-for-firefox-for-android/\">Developing extensions for Firefox Android</a> for test guidance before submitting."
+"Did you test your extension to ensure it works as expected on Firefox for Android? If not, please see <a target=\"_blank\" rel=\"noopener noreferrer\" "
+"href=\"https://extensionworkshop.com/documentation/develop/developing-extensions-for-firefox-for-android/\">Developing extensions for Firefox Android</a> for test guidance before submitting."
 msgstr ""
-"您是否已测试过自己的附加组件能否在 Android 版 Firefox 上正常使用？如果没有，请在提交前参阅<a target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://extensionworkshop.com/documentation/develop/"
-"developing-extensions-for-firefox-for-android/\">开发 Android 版 Firefox 附加组件</a>中的测试指南。"
+"您是否已测试过自己的附加组件能否在 Android 版 Firefox 上正常使用？如果没有，请在提交前参阅<a target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://extensionworkshop.com/documentation/develop/developing-extensions-for-firefox-"
+"for-android/\">开发 Android 版 Firefox 附加组件</a>中的测试指南。"
 
 msgid "Yes, I’ve tested my extension with Firefox for Android"
 msgstr "是的，我已在 Android 版 Firefox 中测试过我的扩展"
@@ -3025,13 +2924,13 @@ msgstr "请选择一个许可协议，标明您对您的源代码授予的权利
 msgid "Sort by:"
 msgstr "排序依照："
 
-#. %s is a list of HTML tags.
+#. %s is a list of markdown syntax.
 #, python-format
-msgid "Allowed HTML: %(allowed_html)s"
-msgstr "允许的 HTML：%(allowed_html)s"
+msgid "Allowed Markdown: %(allowed_markdown)s"
+msgstr "允许使用的 Markdown 语法：%(allowed_markdown)s"
 
-msgid "Some HTML supported."
-msgstr "支持某些 HTML。"
+msgid "Some Markdown supported."
+msgstr "支持部分 Markdown 语法。"
 
 msgid "Remove this application"
 msgstr "移除此应用程序"
@@ -3132,15 +3031,6 @@ msgstr "扩展推荐计划"
 
 msgid "Contribute"
 msgstr "捐助"
-
-msgid "Review Add-ons"
-msgstr "审核附加组件"
-
-msgid "Volunteer reviewers help keep add-ons safe and reliable to use. They enjoy great perks too!"
-msgstr "志愿者审核员为帮助保证附加组件的安全与可靠性而来。辛勤工作也有些奖励。"
-
-msgid "Join us!"
-msgstr "加入我们！"
 
 msgid "Write Some Code"
 msgstr "编写代码"
@@ -4244,10 +4134,6 @@ msgid "Double-click any word to instantly see its definition."
 msgstr "双击任何单词，立刻看到解释和定义。"
 
 #. editorial content for the discovery pane.
-msgid "Blues & Yellows"
-msgstr "蓝色＆黄色"
-
-#. editorial content for the discovery pane.
 #. editorial content for the primary hero shelves.
 msgid "Save batches of tabs as convenient bookmarks."
 msgstr "批量保存标签页为便捷的书签。"
@@ -4308,6 +4194,10 @@ msgstr "畅听 YouTube 音乐，而免受烦人的“视频已暂停。继续观
 #. editorial content for the discovery pane.
 msgid "Change the way the web looks."
 msgstr "更改网页的风格。"
+
+#. editorial content for the discovery pane.
+msgid "Customize YouTube to taste. Give it a new look, new features & filter only the content you want."
+msgstr "随心定制 YouTube。焕新外观、增添功能，并可仅筛选留下您感兴趣的内容。"
 
 #. editorial content for the primary hero shelves.
 msgid "Some websites have difficulty playing videos on Android. Here's a fix."
@@ -4461,6 +4351,10 @@ msgstr "在 Firefox 中私密地翻译网站，不使用云服务。"
 msgid "Block time-wasting websites. Block them completely or just during time frames of your choosing."
 msgstr "阻止浪费时间的网站。既能完全阻止，也能仅在您选择的时间范围内阻止它们。"
 
+#. editorial content for the primary hero shelves.
+msgid "Easily summarize emails, docs, articles, and video transcripts in English across the web — without sacrificing your privacy."
+msgstr "轻松提炼网页上邮件、文档、文章、视频转录文本（英语）的重点，不妥协隐私。"
+
 #. editorial content for the secondary hero shelves.
 msgid "Extensions are like apps for Firefox."
 msgstr "Firefox 上的“小程序”。"
@@ -4474,16 +4368,17 @@ msgid "See all extensions"
 msgstr "浏览所有扩展"
 
 #. editorial content for the secondary hero shelves.
-msgid "Port Authority (Developer Spotlight)"
-msgstr "《端口管理器》（开发者特辑）"
-
-#. editorial content for the secondary hero shelves.
 msgid "Privacy & Security extensions"
 msgstr "隐私和安全扩展"
 
 #. editorial content for the secondary hero shelves.
-msgid "Fantastic tab managers"
-msgstr "绝佳标签页管理器"
+#. editorial content for the homepage shelves.
+msgid "Tab managers"
+msgstr "标签页管理器"
+
+#. editorial content for the secondary hero shelves.
+msgid "Spotlight: Adaptive Tab Bar Color"
+msgstr "特辑：适应性变色标签页栏"
 
 #. editorial content for the secondary hero shelves.
 msgid "See staff picks"
@@ -4553,10 +4448,6 @@ msgstr "社交流媒体"
 #. editorial content for the homepage shelves.
 msgid "See more social streaming staff picks"
 msgstr "更多编辑推荐 > 社交流媒体扩展"
-
-#. editorial content for the homepage shelves.
-msgid "Tab managers"
-msgstr "标签页管理器"
 
 #. editorial content for the homepage shelves.
 msgid "See more tab management staff picks"
@@ -4642,6 +4533,22 @@ msgstr "热门下载管理器"
 msgid "See more download manager staff picks"
 msgstr "看看更多下载管理器（官方精选）"
 
+#. editorial content for the homepage shelves.
+msgid "Accessibility extensions"
+msgstr "无障碍扩展"
+
+#. editorial content for the homepage shelves.
+msgid "See more accessibility staff picks"
+msgstr "更多编辑推荐 > 无障碍"
+
+#. editorial content for the homepage shelves.
+msgid "Extension starter pack"
+msgstr "新手必备扩展"
+
+#. editorial content for the homepage shelves.
+msgid "See more starter extension staff picks"
+msgstr "更多编辑推荐 > 新手必备扩展"
+
 msgid "Unreviewed"
 msgstr "未审核"
 
@@ -4655,11 +4562,8 @@ msgstr "此上传文件已提交。"
 msgid "Could not parse the manifest file."
 msgstr "未能解析清单文件。"
 
-msgid "Add-on ID is required for Firefox 47 and below."
-msgstr "Firefox 47 及之前的版本必须填写附加组件 ID。"
-
-msgid "Lowest supported \"strict_min_version\" is 42.0."
-msgstr "支持的最低 \"strict_min_version\" 为 42.0。"
+msgid "Lowest supported \"strict_min_version\" is {min_version}."
+msgstr "最低支持 \"strict_min_version\" 为 {min_version}。"
 
 msgid "Unknown \"strict_min_version\" {appver} for {app}"
 msgstr "{app} 的“strict_min_version”版本 {appver} 未知"
@@ -4815,6 +4719,12 @@ msgstr "评分{0}星，满分5星"
 #, python-format
 msgid "Rated %(rating)s out of 5 stars"
 msgstr "给 %(rating)s 以5星评价"
+
+msgid "Unsupported file type, please upload a file {extensions}."
+msgstr "不支持的文件类型，请上传 {extensions} 格式的文件。"
+
+msgid "File too large."
+msgstr "文件过大。"
 
 #, python-format
 msgid "<dd>%(review_author)s</dd>"
@@ -5105,8 +5015,7 @@ msgstr "什么是每日用户量？"
 msgid ""
 "<h2>What are daily users?</h2> <p> Add-ons downloaded from this site check for updates once per day. The total number of these update pings is known as Active Daily Users. Daily users can be broken "
 "down by add-on version, operating system, add-on status, application, and locale. </p>"
-msgstr ""
-"<h2>什么是每日用户量？</h2> <p> 从本网站下载的附加组件会在每日检查更新。这些更新的请求数量将作为每日活跃用户数。每日用户量可以按照附加组件版本、操作系统、附加组件状态、应用程序以及地区语言划分。</p>"
+msgstr "<h2>什么是每日用户量？</h2> <p> 从本网站下载的附加组件会在每日检查更新。这些更新的请求数量将作为每日活跃用户数。每日用户量可以按照附加组件版本、操作系统、附加组件状态、应用程序以及地区语言划分。</p>"
 
 msgid "Application versions by Date"
 msgstr "依照日期统计的应用程序版本"
@@ -5169,8 +5078,7 @@ msgstr "法律"
 msgid ""
 "Except where otherwise <a href=\"https://www.mozilla.org/about/legal/\">noted</a>, content on this site is licensed under the <a href=\"https://creativecommons.org/licenses/by-sa/3.0/\">Creative "
 "Commons Attribution Share-Alike License v3.0</a> or any later version."
-msgstr ""
-"本站内容以<a href=\"https://creativecommons.org/licenses/by-sa/3.0/\">知识共享署名-相同方式共享 v3.0</a> 或任何更新版本授权（除非另有<a href=\"https://www.mozilla.org/about/legal/\">注明</a>）。"
+msgstr "本站内容以<a href=\"https://creativecommons.org/licenses/by-sa/3.0/\">知识共享署名-相同方式共享 v3.0</a> 或任何更新版本授权（除非另有<a href=\"https://www.mozilla.org/about/legal/\">注明</a>）。"
 
 #, python-format
 msgid "<a href=\"%(reg)s\">Register</a> or <a href=\"%(login)s\">Log in</a>"
@@ -5253,8 +5161,8 @@ msgid ""
 msgstr "输入要屏蔽的一次性邮箱的完整域。不支持通配符：如果您需要该特性，或需匹配整个电子邮件地址（不仅仅是域部分），请改用“电子邮件用户限制”。"
 
 msgid ""
-"Before starting, please read and accept our Firefox Add-on Distribution Agreement as well as our Review Policies and Rules. The Firefox Add-on Distribution Agreement also links to our Privacy "
-"Notice which explains how we handle your information."
+"Before starting, please read and accept our Firefox Add-on Distribution Agreement as well as our Review Policies and Rules. The Firefox Add-on Distribution Agreement also links to our Privacy Notice"
+" which explains how we handle your information."
 msgstr "在开始之前，请阅读并接受我们的 Firefox 附加组件分发协议以及我们的审核政策和规则。Firefox 附加组件分发协议还链接了我们的隐私声明，那明确解释了我们如何处理您的信息。"
 
 msgid "Please read and accept our Firefox Add-on Distribution Agreement as well as our Review Policies and Rules by visiting {url}"
@@ -5313,8 +5221,7 @@ msgstr ""
 msgid ""
 "Greetings %(author_name)s,\n"
 "\n"
-"You have been invited to become an author of %(addon_name)s on %(domain)s. Accepting the invitation will give you access to edit the add-on, and may show your name in the authors list on the "
-"website.\n"
+"You have been invited to become an author of %(addon_name)s on %(domain)s. Accepting the invitation will give you access to edit the add-on, and may show your name in the authors list on the website.\n"
 "\n"
 "Click on the link below to respond if you want to be added as an author for %(addon_name)s.\n"
 "\n"

@@ -49,6 +49,7 @@ from .models import (
 class GroupUserInline(admin.TabularInline):
     model = GroupUser
     raw_id_fields = ('user',)
+    extra = 0
 
 
 class BannedUserContentInline(admin.TabularInline):
@@ -70,6 +71,14 @@ class BannedUserContentInline(admin.TabularInline):
         'picture_link',
     )
     can_delete = False
+    extra = 0
+
+    def has_add_permission(self, request, obj):
+        # Instances of this model shouldn't be added through the admin.
+        # The combination of this and extra = 0 means Django won't try to
+        # pre-populate empty instances, which in turns avoids useless queries
+        # that would be caused by banned_content_link().
+        return False
 
     def banned_content_link(self, obj, related_class):
         return related_content_link(
@@ -258,8 +267,8 @@ class UserAdmin(AMOModelAdmin):
             try:
                 if lookup_field == 'email':
                     user = UserProfile.objects.get(email=object_id)
-            except UserProfile.DoesNotExist:
-                raise http.Http404
+            except UserProfile.DoesNotExist as exc:
+                raise http.Http404 from exc
             url = request.path.replace(object_id, str(user.id), 1)
             if request.GET:
                 url += '?' + request.GET.urlencode()

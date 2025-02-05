@@ -22,7 +22,7 @@ from waffle.testutils import override_switch
 from olympia import amo
 from olympia.accounts.utils import fxa_login_url
 from olympia.activity.models import ActivityLog
-from olympia.addons.models import Addon, AddonCategory, AddonReviewerFlags
+from olympia.addons.models import Addon, AddonCategory
 from olympia.amo.tests import (
     TestCase,
     addon_factory,
@@ -30,7 +30,8 @@ from olympia.amo.tests import (
     initial,
     version_factory,
 )
-from olympia.constants.licenses import LICENSES_BY_BUILTIN
+from olympia.constants.categories import CATEGORIES
+from olympia.constants.licenses import LICENSE_CC_COPYRIGHT
 from olympia.constants.promoted import NOTABLE, RECOMMENDED
 from olympia.devhub import views
 from olympia.files.tests.test_models import UploadMixin
@@ -506,6 +507,7 @@ class TestAddonSubmitDistribution(TestCase):
         self.assert3xx(response, expected_location)
 
 
+@override_switch('developer-submit-addon-captcha', active=False)
 @override_settings(REPUTATION_SERVICE_URL=None)
 class TestAddonSubmitUpload(UploadMixin, TestCase):
     fixtures = ['base/users']
@@ -896,6 +898,75 @@ class TestAddonSubmitUpload(UploadMixin, TestCase):
         doc = pq(response.content)
         assert doc(modal_selector)
 
+    def test_recaptcha_dispabled(self):
+        url = reverse('devhub.submit.upload', args=['listed'])
+        response = self.client.get(url)
+        form = response.context['new_addon_form']
+        assert 'recaptcha' not in form.fields
+
+    @override_switch('developer-submit-addon-captcha', active=False)
+    def test_recaptcha_skipped_theme_upload(self):
+        url = reverse('devhub.submit.theme.upload', args=['listed'])
+        response = self.client.get(url)
+        form = response.context['new_addon_form']
+        assert 'recaptcha' not in form.fields
+
+    @override_switch('developer-submit-addon-captcha', active=True)
+    def test_recaptcha_enabled_success(self):
+        url = reverse('devhub.submit.upload', args=['listed'])
+        response = self.client.get(url)
+        assert response.status_code == 200
+
+        form = response.context['new_addon_form']
+        assert 'recaptcha' in form.fields
+
+        doc = pq(response.content)
+        assert doc('.g-recaptcha')
+
+        verify_data = urlencode(
+            {
+                'secret': '',
+                'remoteip': '127.0.0.1',
+                'response': 'test',
+            }
+        )
+
+        responses.add(
+            responses.GET,
+            'https://www.google.com/recaptcha/api/siteverify?' + verify_data,
+            json={'error-codes': [], 'success': True},
+        )
+
+        post_response = self.client.post(
+            url,
+            {
+                'g-recaptcha-response': 'test',
+                'upload': self.upload.uuid.hex,
+                'compatible_apps': [amo.FIREFOX.id],
+            },
+        )
+        addon = Addon.unfiltered.get()
+        self.assert3xx(
+            post_response, reverse('devhub.submit.source', args=[addon.slug, 'listed'])
+        )
+
+    @override_switch('developer-submit-addon-captcha', active=True)
+    def test_recaptcha_enabled_failed(self):
+        url = reverse('devhub.submit.upload', args=['listed'])
+        response = self.client.post(
+            url,
+            {
+                'upload': self.upload.uuid.hex,
+                'compatible_apps': [amo.FIREFOX.id],
+            },
+        )
+
+        # Captcha is properly rendered
+        doc = pq(response.content)
+        assert doc('.g-recaptcha')
+
+        assert 'recaptcha' in response.context['new_addon_form'].errors
+
 
 class TestAddonSubmitSource(TestSubmitBase):
     def setUp(self):
@@ -1272,9 +1343,8 @@ class DetailsPageMixin:
         self.assertFormError(response, 'describe_form', 'summary', error)
 
     def test_due_date_set_only_once(self):
-        AddonReviewerFlags.objects.create(
-            addon=self.get_addon(), auto_approval_disabled=True
-        )
+        version = self.get_version()
+        version.needshumanreview_set.create()
         self.get_version().update(due_date=None, _signal=False)
         self.is_success(self.get_dict())
         self.assertCloseToNow(self.get_version().due_date, now=get_review_due_date())
@@ -1422,8 +1492,14 @@ class TestAddonSubmitDetails(DetailsPageMixin, TestSubmitBase):
         self.url = reverse('devhub.submit.details', args=['a3615'])
 
         addon = self.get_addon()
-        AddonCategory.objects.filter(addon=addon, category_id=1).delete()
-        AddonCategory.objects.filter(addon=addon, category_id=71).delete()
+        AddonCategory.objects.filter(
+            addon=addon,
+            category_id=CATEGORIES[amo.ADDON_EXTENSION]['feeds-news-blogging'].id,
+        ).delete()
+        AddonCategory.objects.filter(
+            addon=addon,
+            category_id=CATEGORIES[amo.ADDON_EXTENSION]['social-communication'].id,
+        ).delete()
 
         cat_form = self.client.get(self.url).context['cat_form']
         self.cat_initial = initial(cat_form)
@@ -1490,7 +1566,10 @@ class TestAddonSubmitDetails(DetailsPageMixin, TestSubmitBase):
         assert addon.summary == 'Hello!'
         assert addon.is_experimental
         assert addon.requires_payment
-        assert addon.all_categories[0].id == 22
+        assert (
+            addon.all_categories[0].id
+            == CATEGORIES[amo.ADDON_EXTENSION]['bookmarks'].id
+        )
 
         # Test add-on log activity.
         log_items = ActivityLog.objects.for_addons(addon)
@@ -1542,7 +1621,10 @@ class TestAddonSubmitDetails(DetailsPageMixin, TestSubmitBase):
         assert addon.description == 'its a description'
         assert addon.is_experimental
         assert addon.requires_payment
-        assert addon.all_categories[0].id == 22
+        assert (
+            addon.all_categories[0].id
+            == CATEGORIES[amo.ADDON_EXTENSION]['bookmarks'].id
+        )
 
         # Test add-on log activity.
         log_items = ActivityLog.objects.for_addons(addon)
@@ -1576,7 +1658,12 @@ class TestAddonSubmitDetails(DetailsPageMixin, TestSubmitBase):
 
     def test_submit_categories_max(self):
         assert amo.MAX_CATEGORIES == 3
-        self.cat_initial['categories'] = [22, 1, 71, 74]
+        self.cat_initial['categories'] = [
+            CATEGORIES[amo.ADDON_EXTENSION]['bookmarks'].id,
+            CATEGORIES[amo.ADDON_EXTENSION]['feeds-news-blogging'].id,
+            CATEGORIES[amo.ADDON_EXTENSION]['social-communication'].id,
+            CATEGORIES[amo.ADDON_EXTENSION]['games-entertainment'].id,
+        ]
         response = self.client.post(
             self.url, self.get_dict(cat_initial=self.cat_initial)
         )
@@ -1585,31 +1672,59 @@ class TestAddonSubmitDetails(DetailsPageMixin, TestSubmitBase):
         )
 
     def test_submit_categories_add(self):
-        assert [cat.id for cat in self.get_addon().all_categories] == [22]
-        self.cat_initial['categories'] = [22, 1]
+        assert [cat.id for cat in self.get_addon().all_categories] == [
+            CATEGORIES[amo.ADDON_EXTENSION]['bookmarks'].id
+        ]
+        self.cat_initial['categories'] = [
+            CATEGORIES[amo.ADDON_EXTENSION]['bookmarks'].id,
+            CATEGORIES[amo.ADDON_EXTENSION]['feeds-news-blogging'].id,
+        ]
 
         self.is_success(self.get_dict())
 
         addon_cats = [c.id for c in self.get_addon().all_categories]
-        assert sorted(addon_cats) == [1, 22]
+        assert sorted(addon_cats) == [
+            CATEGORIES[amo.ADDON_EXTENSION]['feeds-news-blogging'].id,
+            CATEGORIES[amo.ADDON_EXTENSION]['bookmarks'].id,
+        ]
 
     def test_submit_categories_addandremove(self):
-        AddonCategory(addon=self.addon, category_id=1).save()
-        assert sorted(cat.id for cat in self.get_addon().all_categories) == [1, 22]
+        AddonCategory(
+            addon=self.addon,
+            category_id=CATEGORIES[amo.ADDON_EXTENSION]['feeds-news-blogging'].id,
+        ).save()
+        assert sorted(cat.id for cat in self.get_addon().all_categories) == [
+            CATEGORIES[amo.ADDON_EXTENSION]['feeds-news-blogging'].id,
+            CATEGORIES[amo.ADDON_EXTENSION]['bookmarks'].id,
+        ]
 
-        self.cat_initial['categories'] = [22, 71]
+        self.cat_initial['categories'] = [
+            CATEGORIES[amo.ADDON_EXTENSION]['bookmarks'].id,
+            CATEGORIES[amo.ADDON_EXTENSION]['social-communication'].id,
+        ]
         self.client.post(self.url, self.get_dict(cat_initial=self.cat_initial))
         category_ids_new = [c.id for c in self.get_addon().all_categories]
-        assert sorted(category_ids_new) == [22, 71]
+        assert sorted(category_ids_new) == [
+            CATEGORIES[amo.ADDON_EXTENSION]['bookmarks'].id,
+            CATEGORIES[amo.ADDON_EXTENSION]['social-communication'].id,
+        ]
 
     def test_submit_categories_remove(self):
-        AddonCategory(addon=self.addon, category_id=1).save()
-        assert sorted(cat.id for cat in self.get_addon().all_categories) == [1, 22]
+        AddonCategory(
+            addon=self.addon,
+            category_id=CATEGORIES[amo.ADDON_EXTENSION]['feeds-news-blogging'].id,
+        ).save()
+        assert sorted(cat.id for cat in self.get_addon().all_categories) == [
+            1,
+            CATEGORIES[amo.ADDON_EXTENSION]['bookmarks'].id,
+        ]
 
-        self.cat_initial['categories'] = [22]
+        self.cat_initial['categories'] = [
+            CATEGORIES[amo.ADDON_EXTENSION]['bookmarks'].id
+        ]
         self.client.post(self.url, self.get_dict(cat_initial=self.cat_initial))
         category_ids_new = [cat.id for cat in self.get_addon().all_categories]
-        assert category_ids_new == [22]
+        assert category_ids_new == [CATEGORIES[amo.ADDON_EXTENSION]['bookmarks'].id]
 
     def test_ul_class_rendering_regression(self):
         """Test ul of license widget doesn't render `license` class.
@@ -1690,12 +1805,20 @@ class TestStaticThemeSubmitDetails(DetailsPageMixin, TestSubmitBase):
         self.url = reverse('devhub.submit.details', args=['a3615'])
 
         addon = self.get_addon()
-        AddonCategory.objects.filter(addon=addon, category_id=1).delete()
-        AddonCategory.objects.filter(addon=addon, category_id=22).delete()
-        AddonCategory.objects.filter(addon=addon, category_id=71).delete()
+        AddonCategory.objects.filter(
+            addon=addon,
+            category_id=CATEGORIES[amo.ADDON_EXTENSION]['feeds-news-blogging'].id,
+        ).delete()
+        AddonCategory.objects.filter(
+            addon=addon, category_id=CATEGORIES[amo.ADDON_EXTENSION]['bookmarks'].id
+        ).delete()
+        AddonCategory.objects.filter(
+            addon=addon,
+            category_id=CATEGORIES[amo.ADDON_EXTENSION]['social-communication'].id,
+        ).delete()
 
         self.next_step = reverse('devhub.submit.finish', args=['a3615'])
-        License.objects.create(builtin=11)
+        License.objects.create(builtin=LICENSE_CC_COPYRIGHT.builtin)
 
         addon.current_version.file.update(status=amo.STATUS_AWAITING_REVIEW)
         addon.update(status=amo.STATUS_NULL, type=amo.ADDON_STATICTHEME)
@@ -1712,7 +1835,7 @@ class TestStaticThemeSubmitDetails(DetailsPageMixin, TestSubmitBase):
                 }
             )
         cat_form = {'categories': [300]}
-        license_form = {'license-builtin': 11}
+        license_form = {'license-builtin': LICENSE_CC_COPYRIGHT.builtin}
         result.update(describe_form)
         result.update(cat_form)
         result.update(license_form)
@@ -1784,18 +1907,26 @@ class TestStaticThemeSubmitDetails(DetailsPageMixin, TestSubmitBase):
         assert content('#cc-chooser')  # cc license wizard
         assert content('#theme-license')  # cc license result
         assert content('#id_license-builtin')  # license list
-        # There should be one license - 11 we added in setUp - and no 'other'.
-        assert len(content('input.license')) == 1
-        assert content('input.license').attr('value') == '11'
-        assert content('input.license').attr('data-name') == (
-            LICENSES_BY_BUILTIN[11].name
+        # There should be 7 licenses - we added LICENSE_CC_COPYRIGHT.builtin in
+        # setUp() and the other 6 CC licenses through versions migration 0046.
+        inputs = content('input.license')
+        assert len(inputs) == 7
+        license_ids = [int(elm.attrib['value']) for elm in inputs]
+        expected_licenses_ids = list(
+            License.objects.builtins(cc=True).values_list('builtin', flat=True)
+        )
+        assert license_ids == expected_licenses_ids
+        assert content('input.license')[0].attrib['data-name'] == (
+            LICENSE_CC_COPYRIGHT.name
         )
 
     def test_set_builtin_license_no_log(self):
-        self.is_success(self.get_dict(**{'license-builtin': 11}))
+        self.is_success(
+            self.get_dict(**{'license-builtin': LICENSE_CC_COPYRIGHT.builtin})
+        )
         addon = self.get_addon()
         assert addon.status == amo.STATUS_NOMINATED
-        assert addon.current_version.license.builtin == 11
+        assert addon.current_version.license.builtin == LICENSE_CC_COPYRIGHT.builtin
         log_items = ActivityLog.objects.for_addons(self.get_addon())
         assert not log_items.filter(action=amo.LOG.CHANGE_LICENSE.id)
 
@@ -2047,6 +2178,11 @@ class TestVersionSubmitAutoChannel(TestSubmitBase):
     def setUp(self):
         super().setUp()
         self.url = reverse('devhub.submit.version', args=[self.addon.slug])
+
+    @override_switch('developer-submit-addon-captcha', active=True)
+    def test_recaptcha_not_included(self):
+        response = self.client.get(self.url)
+        assert 'recaptcha' not in response.context['new_addon_form'].fields
 
     @mock.patch('olympia.devhub.views._submit_upload', side_effect=views._submit_upload)
     def test_listed_last_uses_listed_upload(self, _submit_upload_mock):
@@ -2422,6 +2558,11 @@ class VersionSubmitUploadMixin:
 class TestVersionSubmitUploadListed(VersionSubmitUploadMixin, UploadMixin, TestCase):
     channel = amo.CHANNEL_LISTED
 
+    @override_switch('developer-submit-addon-captcha', active=True)
+    def test_recaptcha_not_included(self):
+        response = self.client.get(self.url)
+        assert 'recaptcha' not in response.context['new_addon_form'].fields
+
     def test_success(self):
         response = self.post()
         version = self.addon.find_latest_version(channel=amo.CHANNEL_LISTED)
@@ -2602,6 +2743,11 @@ class TestVersionSubmitUploadListed(VersionSubmitUploadMixin, UploadMixin, TestC
 class TestVersionSubmitUploadUnlisted(VersionSubmitUploadMixin, UploadMixin, TestCase):
     channel = amo.CHANNEL_UNLISTED
 
+    @override_switch('developer-submit-addon-captcha', active=True)
+    def test_recaptcha_not_included(self):
+        response = self.client.get(self.url)
+        assert 'recaptcha' not in response.context['new_addon_form'].fields
+
     def test_success(self):
         # No validation errors or warning.
         result = {
@@ -2756,7 +2902,7 @@ class TestVersionSubmitDetails(TestSubmitBase):
             'name': str(self.addon.name),
             'slug': self.addon.slug,
             'summary': str(self.addon.summary),
-            'categories': [22, 1],
+            'categories': [CATEGORIES[amo.ADDON_EXTENSION]['bookmarks'].id, 1],
             'license-builtin': 3,
         }
         response = self.client.post(self.url, data)
@@ -2863,3 +3009,67 @@ class TestVersionSubmitFinish(TestAddonSubmitFinish):
 
     def test_no_welcome_email_if_unlisted(self):
         pass
+
+
+class TestSubmissionsDisabledView(TestSubmitBase):
+    def setUp(self):
+        super().setUp()
+        addon = self.get_addon()
+        self.version = version_factory(addon=addon)
+
+    def _test_submissions_disabled(self, viewname, *, assert_status=True, args=None):
+        args = args or []
+        url = reverse(viewname, args=args)
+
+        self.create_flag('enable-submissions', note=':-(', everyone=False)
+        response = self.client.post(url)
+        if assert_status:
+            assert response.status_code == 503
+        doc = pq(response.content)
+        assert 'Add-on uploads are temporarily unavailable' in doc.text()
+        assert ':-(' in doc.html()
+
+        self.create_flag('enable-submissions', note='', everyone=False)
+        response = self.client.post(url)
+        if assert_status:
+            assert response.status_code == 503
+        doc = pq(response.content)
+        assert 'Add-on uploads are temporarily unavailable.' in doc.text()
+        assert ':-(' not in doc.html()
+
+    def _test_submissions_disabled_by_list_type(
+        self, viewname, assert_status=True, args=None
+    ):
+        args = args or []
+        self._test_submissions_disabled(
+            viewname, assert_status=assert_status, args=args + ['listed']
+        )
+        self._test_submissions_disabled(
+            viewname, assert_status=assert_status, args=args + ['unlisted']
+        )
+
+    def test_submissions_disabled_submit_details(self):
+        self._test_submissions_disabled('devhub.submit.details', args=['a3615'])
+
+    def test_submissions_disabled_finish(self):
+        self._test_submissions_disabled('devhub.submit.finish', args=[self.addon.slug])
+
+    def test_submissions_disabled_version_details(self):
+        self._test_submissions_disabled(
+            'devhub.submit.version.details', args=[self.addon.slug, self.version.pk]
+        )
+
+    def test_submissions_disabled_version_finish(self):
+        self._test_submissions_disabled(
+            'devhub.submit.version.finish', args=[self.addon.slug, self.version.pk]
+        )
+
+    def test_submissions_disabled_upload(self):
+        self._test_submissions_disabled_by_list_type(
+            'devhub.submit.upload', assert_status=False
+        )
+
+    def test_submissions_disabled_wizard(self):
+        self._test_submissions_disabled_by_list_type(
+            'devhub.submit.wizard', assert_status=False
+        )

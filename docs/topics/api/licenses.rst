@@ -16,7 +16,7 @@ License Choices - non-Themes
 
 .. _license-list-extension:
 
-Some popular opensource licenses can be chosen from, when creating or updating a version
+Some popular open source licenses can be chosen from, when creating or updating a version
 via in the :ref:`add-on api<version-create>`. These licenses cannot be used for themes.
 Open source license slugs are taken from the `SPDX License list <https://spdx.org/licenses/>`_
 - and are case-sensitive.
@@ -25,13 +25,17 @@ Open source license slugs are taken from the `SPDX License list <https://spdx.or
                    Slug  License
     ===================  ==============================================================
     all-rights-reserved  All Rights Reserved. This is not an open source license.
-                MPL-2.0  `Mozilla Public License 2.0 <http://www.mozilla.org/MPL/2.0/>`_
-       GPL-2.0-or-later  `GNU General Public License v2.0 (or later) <http://www.gnu.org/licenses/gpl-2.0.html>`_
-       GPL-3.0-or-later  `GNU General Public License v3.0 (or later) <http://www.gnu.org/licenses/gpl-3.0.html>`_
-      LGPL-2.1-or-later  `GNU Library General Public License v2.1 (or later) <http://www.gnu.org/licenses/lgpl-2.1.html>`_
-      LGPL-3.0-or-later  `GNU Library General Public License v3.0 (or later) <http://www.gnu.org/licenses/lgpl-3.0.html>`_
-                    MIT  `The MIT License <http://www.opensource.org/license/mit>`_
-           BSD-2-Clause  `The BSD (2 clause) License <http://www.opensource.org/license/bsd-2-clause>`_
+                MPL-2.0  `Mozilla Public License 2.0 <https://www.mozilla.org/MPL/2.0/>`_
+             Apache-2.0  `Apache License 2.0 <https://spdx.org/licenses/Apache-2.0.html>`_
+           GPL-2.0-only  `GNU General Public License v2.0 only <https://spdx.org/licenses/GPL-2.0-only.html>`_
+           GPL-3.0-only  `GNU General Public License v3.0 only <https://spdx.org/licenses/GPL-3.0-only.html>`_
+          LGPL-2.1-only  `GNU Lesser General Public License v2.1 only <https://spdx.org/licenses/LGPL-2.1-only.html>`_
+          LGPL-3.0-only  `GNU Lesser General Public License v3.0 only <https://spdx.org/licenses/LGPL-3.0-only.html>`_
+          AGPL-3.0-only  `GNU Affero General Public License v3.0 only <https://spdx.org/licenses/AGPL-3.0-only.html>`_
+                    MIT  `MIT License <https://spdx.org/licenses/MIT.html>`_
+                    ISC  `ISC License <https://spdx.org/licenses/ISC.html>`_
+           BSD-2-Clause  `BSD 2-Clause "Simplified" License <https://spdx.org/licenses/BSD-2-Clause.html>`_
+              Unlicense  `The Unlicense <https://spdx.org/licenses/Unlicense.html>`_
     ===================  ==============================================================
 
 
@@ -43,17 +47,17 @@ License Choices - Themes
 
 Creative Commons licenses can be chosen from, when creating or updating a theme version
 via in the :ref:`add-on api<version-create>`. These are the only license options for themes.
-Open source license slugs are taken from the `SPDX License list <https://spdx.org/licenses/>`_
+Creative Commons license slugs are taken from the `SPDX License list <https://spdx.org/licenses/>`_
 - and are case-sensitive.
 
     ======================  ===========================================================
                       Slug  License
     ======================  ===========================================================
     cc-all-rights-reserved  All Rights Reserved. This is not an open source license.
-                 CC-BY-3.0  `Creative Commons Attribution 3.0 <http://creativecommons.org/licenses/by/3.0/>`_
-              CC-BY-NC-3.0  `Creative Commons Attribution-NonCommercial 3.0 <http://creativecommons.org/licenses/by-nc/3.0/>`_
-           CC-BY-NC-ND-3.0  `Creative Commons Attribution-NonCommercial-NoDerivs 3.0 <http://creativecommons.org/licenses/by-nc-nd/3.0/>`_
-           CC-BY-NC-SA-3.0  `Creative Commons Attribution-NonCommercial-Share Alike 3.0 <http://creativecommons.org/licenses/by-nc-sa/3.0/>`_
-              CC-BY-ND-3.0  `Creative Commons Attribution-NoDerivs 3.0 <http://creativecommons.org/licenses/by-nd/3.0/>`_
-              CC-BY-SA-3.0  `Creative Commons Attribution-ShareAlike 3.0 <http://creativecommons.org/licenses/by-sa/3.0/>`_
+                 CC-BY-4.0  `Creative Commons Attribution 4.0 <https://creativecommons.org/licenses/by/4.0/>`_
+              CC-BY-NC-4.0  `Creative Commons Attribution-NonCommercial 4.0 <https://creativecommons.org/licenses/by-nc/4.0/>`_
+           CC-BY-NC-ND-4.0  `Creative Commons Attribution-NonCommercial-NoDerivs 4.0 <https://creativecommons.org/licenses/by-nc-nd/4.0/>`_
+           CC-BY-NC-SA-4.0  `Creative Commons Attribution-NonCommercial-Share Alike 4.0 <https://creativecommons.org/licenses/by-nc-sa/4.0/>`_
+              CC-BY-ND-4.0  `Creative Commons Attribution-NoDerivs 4.0 <https://creativecommons.org/licenses/by-nd/4.0/>`_
+              CC-BY-SA-4.0  `Creative Commons Attribution-ShareAlike 4.0 <https://creativecommons.org/licenses/by-sa/4.0/>`_
     ======================  ===========================================================

@@ -1,9 +1,7 @@
 import json
 import os
 import re
-import sys
 
-import django
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.sitemaps.views import x_robots_tag
@@ -14,6 +12,7 @@ from django.http import Http404, HttpResponse, HttpResponseNotFound, JsonRespons
 from django.template.response import TemplateResponse
 from django.utils.cache import patch_cache_control
 from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import csrf_exempt
 
 from rest_framework import exceptions as drf_exceptions
 from rest_framework.response import Response
@@ -23,6 +22,7 @@ from olympia import amo
 from olympia.amo.utils import HttpResponseXSendFile, use_fake_fxa
 from olympia.api.exceptions import base_500_data
 from olympia.api.serializers import SiteStatusSerializer
+from olympia.core.utils import get_version_json
 from olympia.users.models import UserProfile
 
 from . import monitors
@@ -67,6 +67,7 @@ def services_heartbeat(request):
 
 
 @never_cache
+@csrf_exempt
 @non_atomic_requests
 def client_info(request):
     if getattr(settings, 'ENV', None) != 'dev':
@@ -165,22 +166,7 @@ def csrf_failure(request, reason=''):
 
 @non_atomic_requests
 def version(request):
-    path = os.path.join(settings.ROOT, 'version.json')
-    with open(path) as f:
-        contents = json.loads(f.read())
-
-    py_info = sys.version_info
-    contents['python'] = '{major}.{minor}'.format(
-        major=py_info.major, minor=py_info.minor
-    )
-    contents['django'] = '{major}.{minor}'.format(
-        major=django.VERSION[0], minor=django.VERSION[1]
-    )
-
-    path = os.path.join(settings.ROOT, 'package.json')
-    with open(path) as f:
-        data = json.loads(f.read())
-        contents['addons-linter'] = data['dependencies']['addons-linter']
+    contents = get_version_json()
 
     res = HttpResponse(json.dumps(contents), content_type='application/json')
     res.headers['Access-Control-Allow-Origin'] = '*'
@@ -259,11 +245,11 @@ def sitemap(request):
             )
             patch_cache_control(response, max_age=60 * 60)
 
-    except EmptyPage:
-        raise Http404('Page %s empty' % page)
-    except PageNotAnInteger:
-        raise Http404('No page "%s"' % page)
-    except InvalidSection:
-        raise Http404('No sitemap available for section: %r' % section)
+    except EmptyPage as exc:
+        raise Http404('Page %s empty' % page) from exc
+    except PageNotAnInteger as exc:
+        raise Http404('No page "%s"' % page) from exc
+    except InvalidSection as exc:
+        raise Http404('No sitemap available for section: %r' % section) from exc
 
     return response

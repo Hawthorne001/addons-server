@@ -51,14 +51,12 @@
             <th>Internal AMO ID</th>
             <td>{{ addon.id }}</td>
           </tr>
-          {% if addon.is_deleted %}
           <tr class="addon-status">
             <th>Status</th>
             <td>
                 <strong>{{ addon.get_status_display() }}</strong>
             </td>
           </tr>
-          {% endif %}
           <tr class="addon-updated">
             <th>Updated</th>
             <td>
@@ -133,7 +131,7 @@
               <th>Average Daily Users</th>
               <td>
                 <strong class="downloads">{{
-                  addon.average_daily_users|numberfmt }}</strong>
+                  addon.average_daily_users|numberfmt }}</strong> ({% if addon.hotness >= 0 %}+{% endif %}{{ addon.hotness * 100}}% from last week)
               </td>
             </tr>
           {% endif %}

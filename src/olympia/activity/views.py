@@ -1,6 +1,10 @@
+import os
+
+from django import http
 from django.conf import settings
+from django.db.transaction import non_atomic_requests
 from django.shortcuts import get_object_or_404
-from django.utils.translation import gettext, gettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 from rest_framework import exceptions, status
 from rest_framework.decorators import (
@@ -15,7 +19,7 @@ from rest_framework.viewsets import GenericViewSet
 import olympia.core.logger
 from olympia import amo
 from olympia.access import acl
-from olympia.activity.models import ActivityLog
+from olympia.activity.models import ActivityLog, AddonLog
 from olympia.activity.serializers import (
     ActivityLogSerializer,
     ActivityLogSerializerForComments,
@@ -23,15 +27,16 @@ from olympia.activity.serializers import (
 from olympia.activity.tasks import process_email
 from olympia.activity.utils import (
     action_from_user,
-    filter_queryset_to_pending_replies,
     log_and_notify,
 )
 from olympia.addons.views import AddonChildMixin
+from olympia.amo.utils import HttpResponseXSendFile
 from olympia.api.permissions import (
     AllowAddonAuthor,
     AllowListedViewerOrReviewer,
     AllowUnlistedViewerOrReviewer,
     AnyOf,
+    GroupPermission,
 )
 
 
@@ -49,6 +54,7 @@ class VersionReviewNotesViewSet(
         alog = ActivityLog.objects.for_versions(self.get_version_object())
         if not acl.is_user_any_kind_of_reviewer(self.request.user, allow_viewers=True):
             alog = alog.transform(ActivityLog.transformer_anonymize_user_for_developer)
+        alog = alog.select_related('attachmentlog')
         return alog.filter(action__in=amo.LOG_REVIEW_QUEUE_DEVELOPER)
 
     def get_addon_object(self):
@@ -60,8 +66,9 @@ class VersionReviewNotesViewSet(
         if not hasattr(self, 'version_object'):
             addon = self.get_addon_object()
             self.version_object = get_object_or_404(
-                # Fetch the version without transforms, using the addon related
-                # manager to avoid reloading it from the database.
+                # Fetch the version without transforms, we don't need the extra
+                # data (and the addon property will be set on the version since
+                # we're using the addon.versions manager).
                 addon.versions(manager='unfiltered_for_relations')
                 .all()
                 .no_transforms(),
@@ -70,29 +77,30 @@ class VersionReviewNotesViewSet(
         return self.version_object
 
     def check_object_permissions(self, request, obj):
-        """Check object permissions against the Addon, not the ActivityLog."""
+        # Permissions checks are all done in check_permissions(), there are no
+        # checks to be done for an individual activity log.
+        pass
+
+    def check_permissions(self, request):
         # Just loading the add-on object triggers permission checks, because
         # the implementation in AddonChildMixin calls AddonViewSet.get_object()
         self.get_addon_object()
+        # The only thing left to test is that the Version is not deleted.
+        version = self.get_version_object()
+        if version.deleted and not GroupPermission(
+            amo.permissions.ADDONS_VIEW_DELETED
+        ).has_object_permission(request, self, version):
+            raise http.Http404
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
         ctx['to_highlight'] = list(
-            filter_queryset_to_pending_replies(self.get_queryset()).values_list(
-                'pk', flat=True
-            )
+            self.get_queryset().pending_for_developer().values_list('pk', flat=True)
         )
         return ctx
 
     def create(self, request, *args, **kwargs):
         version = self.get_version_object()
-        latest_version = version.addon.find_latest_version(
-            channel=version.channel, exclude=()
-        )
-        if version != latest_version:
-            raise exceptions.ParseError(
-                gettext('Only latest versions of addons can have notes added.')
-            )
         serializer = ActivityLogSerializerForComments(data=request.data)
         serializer.is_valid(raise_exception=True)
         activity_object = log_and_notify(
@@ -166,3 +174,33 @@ def inbound_email(request):
     spam_rating = request.data.get('SpamScore', 0.0)
     process_email.apply_async((message, spam_rating))
     return Response(data=validation_response, status=status.HTTP_201_CREATED)
+
+
+@non_atomic_requests
+def download_attachment(request, log_id):
+    """
+    Download attachment for a given activity log.
+    """
+    log = get_object_or_404(ActivityLog, pk=log_id)
+    addon = get_object_or_404(AddonLog, activity_log=log).addon
+    attachmentlog = log.attachmentlog
+
+    is_reviewer = acl.is_user_any_kind_of_reviewer(request.user, allow_viewers=True)
+    is_developer = acl.check_addon_ownership(
+        request.user,
+        addon,
+        allow_developer=True,
+    )
+
+    if not (is_reviewer or is_developer):
+        raise http.Http404()
+
+    response = HttpResponseXSendFile(request, attachmentlog.file.path)
+    path = attachmentlog.file.path
+    if not isinstance(path, str):
+        path = path.decode('utf8')
+    name = os.path.basename(path.replace('"', ''))
+    disposition = f'attachment; filename="{name}"'.encode()
+    response['Content-Disposition'] = disposition
+    response['Access-Control-Allow-Origin'] = '*'
+    return response

@@ -1,8 +1,9 @@
 from collections import OrderedDict, defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from django.conf import settings
 from django.contrib.humanize.templatetags.humanize import naturaltime
+from django.core.files.base import ContentFile
 from django.db.models import Count, F, Q
 from django.urls import reverse
 from django.utils.http import urlencode
@@ -12,21 +13,25 @@ import markupsafe
 
 import olympia.core.logger
 from olympia import amo
-from olympia.abuse.tasks import notify_addon_decision_to_cinder, resolve_job_in_cinder
+from olympia.abuse.models import CinderJob, CinderPolicy, ContentDecision
+from olympia.abuse.tasks import report_decision_to_cinder_and_notify
 from olympia.access import acl
-from olympia.activity.models import ActivityLog
+from olympia.activity.models import ActivityLog, AttachmentLog, ReviewActionReasonLog
 from olympia.activity.utils import notify_about_activity_log
 from olympia.addons.models import Addon, AddonApprovalsCounter, AddonReviewerFlags
+from olympia.constants.abuse import DECISION_ACTIONS
 from olympia.constants.promoted import RECOMMENDED
+from olympia.files.models import File
 from olympia.lib.crypto.signing import sign_file
+from olympia.ratings.models import Rating
 from olympia.reviewers.models import (
     AutoApprovalSummary,
     NeedsHumanReview,
+    ReviewQueueHistory,
     get_flags,
 )
-from olympia.reviewers.templatetags.jinja_helpers import format_score
 from olympia.users.utils import get_task_user
-from olympia.versions.models import VersionReviewerFlags
+from olympia.versions.models import Version, VersionReviewerFlags
 
 
 log = olympia.core.logger.getLogger('z.mailer')
@@ -47,22 +52,6 @@ class AddonQueueTable(tables.Table):
         verbose_name='Last Review',
         accessor='addonapprovalscounter__last_human_review',
     )
-    code_weight = tables.Column(
-        verbose_name='Code Weight',
-        accessor='_current_version__autoapprovalsummary__code_weight',
-    )
-    metadata_weight = tables.Column(
-        verbose_name='Metadata Weight',
-        accessor='_current_version__autoapprovalsummary__metadata_weight',
-    )
-    weight = tables.Column(
-        verbose_name='Total Weight',
-        accessor='_current_version__autoapprovalsummary__weight',
-    )
-    score = tables.Column(
-        verbose_name='Maliciousness Score',
-        accessor='_current_version__autoapprovalsummary__score',
-    )
     show_count_in_dashboard = True
     view_name = 'queue'
 
@@ -71,10 +60,6 @@ class AddonQueueTable(tables.Table):
             'addon_name',
             'flags',
             'last_human_review',
-            'code_weight',
-            'metadata_weight',
-            'weight',
-            'score',
         )
         orderable = False
 
@@ -113,59 +98,41 @@ class AddonQueueTable(tables.Table):
     def render_last_human_review(self, value):
         return naturaltime(value) if value else ''
 
-    def render_weight(self, *, record, value):
-        return markupsafe.Markup(
-            '<span title="%s">%d</span>'
-            % (
-                '\n'.join(
-                    self.get_version(
-                        record
-                    ).autoapprovalsummary.get_pretty_weight_info()
-                ),
-                value,
-            )
-        )
-
-    def render_score(self, value):
-        return format_score(value)
-
     render_last_content_review = render_last_human_review
 
 
 class PendingManualApprovalQueueTable(AddonQueueTable):
     addon_type = tables.Column(verbose_name='Type', accessor='type', orderable=False)
     due_date = tables.Column(verbose_name='Due Date', accessor='first_version_due_date')
-    score = tables.Column(
-        verbose_name='Maliciousness Score',
-        accessor='first_pending_version__autoapprovalsummary__score',
-    )
     title = '🛠️ Manual Review'
-    urlname = 'queue_extension'
-    url = r'^extension$'
+    name = 'queue_extension'
+    url_suffix = r'^extension$'
     permission = amo.permissions.ADDONS_REVIEW
 
-    class Meta:
-        fields = ('addon_name', 'addon_type', 'due_date', 'flags', 'score')
-        exclude = (
-            'last_human_review',
-            'code_weight',
-            'metadata_weight',
-            'weight',
-        )
+    class Meta(AddonQueueTable.Meta):
+        fields = ('addon_name', 'addon_type', 'due_date', 'flags')
+        exclude = ('last_human_review',)
+        orderable = True
 
     @classmethod
-    def get_queryset(self, request, *, upcoming_due_date_focus=False, **kw):
-        show_only_upcoming = upcoming_due_date_focus and not acl.action_allowed_for(
-            request.user, amo.permissions.ADDONS_ALL_DUE_DATES
-        )
-        qs = Addon.unfiltered.get_queryset_for_pending_queues(
-            admin_reviewer=is_admin_reviewer(request.user),
-            show_temporarily_delayed=acl.action_allowed_for(
+    def get_queryset(cls, request, *, upcoming_due_date_focus=False, **kwargs):
+        if request is None:
+            admin_reviewer = True
+            show_temporarily_delayed = True
+            show_only_upcoming = upcoming_due_date_focus
+        else:
+            admin_reviewer = is_admin_reviewer(request.user)
+            show_temporarily_delayed = acl.action_allowed_for(
                 request.user, amo.permissions.ADDONS_TRIAGE_DELAYED
-            ),
+            )
+            show_only_upcoming = upcoming_due_date_focus and not acl.action_allowed_for(
+                request.user, amo.permissions.ADDONS_ALL_DUE_DATES
+            )
+        return Addon.unfiltered.get_queryset_for_pending_queues(
+            admin_reviewer=admin_reviewer,
+            show_temporarily_delayed=show_temporarily_delayed,
             show_only_upcoming=show_only_upcoming,
         )
-        return qs
 
     def get_version(self, record):
         # Use the property set by get_queryset_for_pending_queues() to display
@@ -189,39 +156,27 @@ class PendingManualApprovalQueueTable(AddonQueueTable):
         return 'due_date'
 
 
-class NewThemesQueueTable(PendingManualApprovalQueueTable):
-    title = '🎨 New'
-    urlname = 'queue_theme_nominated'
-    url = r'^theme_new$'
+class ThemesQueueTable(PendingManualApprovalQueueTable):
+    title = '🎨 Themes'
+    name = 'queue_theme'
+    url_suffix = r'^theme$'
     permission = amo.permissions.STATIC_THEMES_REVIEW
+    due_date = tables.Column(
+        verbose_name='Target Date', accessor='first_version_due_date'
+    )
 
-    class Meta(AddonQueueTable.Meta):
+    class Meta(PendingManualApprovalQueueTable.Meta):
         exclude = (
-            'score',
             'addon_type',
             'last_human_review',
-            'code_weight',
-            'metadata_weight',
-            'weight',
         )
 
     @classmethod
-    def get_queryset(cls, request, **kw):
+    def get_queryset(cls, request, **kwargs):
+        admin_reviewer = is_admin_reviewer(request.user) if request else True
         return Addon.objects.get_queryset_for_pending_queues(
-            admin_reviewer=is_admin_reviewer(request.user), theme_review=True
-        ).filter(status__in=(amo.STATUS_NOMINATED,))
-
-
-class UpdatedThemesQueueTable(NewThemesQueueTable):
-    title = '🎨 Updates'
-    urlname = 'queue_theme_pending'
-    url = r'^theme_updates$'
-
-    @classmethod
-    def get_queryset(cls, request, **kw):
-        return Addon.objects.get_queryset_for_pending_queues(
-            admin_reviewer=is_admin_reviewer(request.user), theme_review=True
-        ).exclude(status=amo.STATUS_NOMINATED)
+            admin_reviewer=admin_reviewer, theme_review=True
+        )
 
 
 class PendingRejectionTable(AddonQueueTable):
@@ -229,25 +184,9 @@ class PendingRejectionTable(AddonQueueTable):
         verbose_name='Pending Rejection Deadline',
         accessor='first_version_pending_rejection_date',
     )
-    code_weight = tables.Column(
-        verbose_name='Code Weight',
-        accessor='first_pending_version__autoapprovalsummary__code_weight',
-    )
-    metadata_weight = tables.Column(
-        verbose_name='Metadata Weight',
-        accessor='first_pending_version__autoapprovalsummary__metadata_weight',
-    )
-    weight = tables.Column(
-        verbose_name='Total Weight',
-        accessor='first_pending_version__autoapprovalsummary__weight',
-    )
-    score = tables.Column(
-        verbose_name='Maliciousness Score',
-        accessor='first_pending_version__autoapprovalsummary__score',
-    )
     title = 'Pending Rejection'
-    urlname = 'queue_pending_rejection'
-    url = r'^pending_rejection$'
+    name = 'queue_pending_rejection'
+    url_suffix = r'^pending_rejection$'
     permission = amo.permissions.REVIEWS_ADMIN
 
     class Meta(PendingManualApprovalQueueTable.Meta):
@@ -256,18 +195,13 @@ class PendingRejectionTable(AddonQueueTable):
             'flags',
             'last_human_review',
             'deadline',
-            'code_weight',
-            'metadata_weight',
-            'weight',
-            'score',
         )
         exclude = ('due_date',)
 
     @classmethod
-    def get_queryset(cls, request, **kw):
-        return Addon.objects.get_pending_rejection_queue(
-            admin_reviewer=is_admin_reviewer(request.user)
-        )
+    def get_queryset(cls, request, **kwargs):
+        admin_reviewer = is_admin_reviewer(request.user) if request else True
+        return Addon.objects.get_pending_rejection_queue(admin_reviewer=admin_reviewer)
 
     def get_version(self, record):
         # Use the property set by get_pending_rejection_queue() to display
@@ -280,29 +214,27 @@ class PendingRejectionTable(AddonQueueTable):
 
 class ContentReviewTable(AddonQueueTable):
     last_updated = tables.DateTimeColumn(verbose_name='Last Updated')
+    created = tables.DateTimeColumn(verbose_name='Created')
     title = 'Content Review'
-    urlname = 'queue_content_review'
-    url = r'^content_review$'
+    name = 'queue_content_review'
+    url_suffix = r'^content_review$'
     permission = amo.permissions.ADDONS_CONTENT_REVIEW
 
     class Meta(AddonQueueTable.Meta):
-        fields = ('addon_name', 'flags', 'last_updated')
+        fields = ('addon_name', 'flags', 'created', 'last_updated')
         # Exclude base fields AddonQueueTable has that we don't want.
-        exclude = (
-            'last_human_review',
-            'code_weight',
-            'metadata_weight',
-            'weight',
-        )
-        orderable = False
+        exclude = ('last_human_review',)
+        orderable = True
 
     @classmethod
-    def get_queryset(cls, request, **kw):
-        return Addon.objects.get_content_review_queue(
-            admin_reviewer=is_admin_reviewer(request.user)
-        )
+    def get_queryset(cls, request, **kwargs):
+        admin_reviewer = is_admin_reviewer(request.user) if request else True
+        return Addon.objects.get_content_review_queue(admin_reviewer=admin_reviewer)
 
     def render_last_updated(self, value):
+        return naturaltime(value) if value else ''
+
+    def render_created(self, value):
         return naturaltime(value) if value else ''
 
     def _get_addon_name_url(self, record):
@@ -314,8 +246,8 @@ class MadReviewTable(AddonQueueTable):
     unlisted_text = 'Unlisted versions ({0})'
     show_count_in_dashboard = False
     title = 'Flagged by MAD for Human Review'
-    urlname = 'queue_mad'
-    url = r'^mad$'
+    name = 'queue_mad'
+    url_suffix = r'^mad$'
     permission = amo.permissions.ADDONS_REVIEW
 
     def render_addon_name(self, record):
@@ -348,10 +280,9 @@ class MadReviewTable(AddonQueueTable):
         return markupsafe.Markup(''.join(rval))
 
     @classmethod
-    def get_queryset(cls, request, **kw):
-        return Addon.objects.get_mad_queue(
-            admin_reviewer=is_admin_reviewer(request.user)
-        ).annotate(
+    def get_queryset(cls, request, **kwargs):
+        admin_reviewer = is_admin_reviewer(request.user) if request else True
+        return Addon.objects.get_mad_queue(admin_reviewer=admin_reviewer).annotate(
             unlisted_versions_that_need_human_review=Count(
                 'versions',
                 filter=Q(
@@ -367,11 +298,28 @@ class MadReviewTable(AddonQueueTable):
 
 class ModerationQueueTable:
     title = 'Rating Reviews'
-    urlname = 'queue_moderated'
-    url = r'^reviews$'
+    name = 'queue_moderated'
+    url_suffix = r'^reviews$'
     permission = amo.permissions.RATINGS_MODERATE
-    show_count_in_dashboard = False
+    show_count_in_dashboard = True
     view_name = 'queue_moderated'
+
+    @classmethod
+    def get_queryset(cls, request, **kwargs):
+        return Rating.objects.all().to_moderate().order_by('ratingflag__created')
+
+
+class HeldDecisionQueueTable:
+    title = 'Held Decisions for 2nd Level Approval'
+    name = 'queue_decisions'
+    url_suffix = r'^held_decisions$'
+    permission = amo.permissions.REVIEWS_ADMIN
+    show_count_in_dashboard = True
+    view_name = 'queue_decisions'
+
+    @classmethod
+    def get_queryset(cls, request, **kwargs):
+        return ContentDecision.objects.filter(action_date=None).order_by('created')
 
 
 class ReviewHelper:
@@ -418,7 +366,6 @@ class ReviewHelper:
             self.handler = ReviewUnlisted(
                 addon=self.addon,
                 version=self.version,
-                review_type='unlisted',
                 user=self.user,
                 human_review=self.human_review,
                 content_review=self.content_review,
@@ -427,7 +374,6 @@ class ReviewHelper:
             self.handler = ReviewAddon(
                 addon=self.addon,
                 version=self.version,
-                review_type='nominated',
                 user=self.user,
                 human_review=self.human_review,
                 content_review=self.content_review,
@@ -436,7 +382,6 @@ class ReviewHelper:
             self.handler = ReviewFiles(
                 addon=self.addon,
                 version=self.version,
-                review_type='pending',
                 user=self.user,
                 human_review=self.human_review,
                 content_review=self.content_review,
@@ -535,6 +480,25 @@ class ReviewHelper:
         )
         version_is_blocked = self.version and self.version.is_blocked
 
+        self.unresolved_cinderjob_qs = (
+            CinderJob.objects.for_addon(self.addon)
+            .unresolved()
+            .resolvable_in_reviewer_tools()
+            .prefetch_related(
+                'abusereport_set',
+                'appealed_decisions__cinder_job',
+                'appealed_decisions__override_of__cinder_job',
+                'appealed_decisions__appeals',
+            )
+        )
+        unresolved_cinder_jobs = list(self.unresolved_cinderjob_qs)
+        has_unresolved_abuse_report_jobs = any(
+            job for job in unresolved_cinder_jobs if not job.is_appeal
+        )
+        has_unresolved_appeal_jobs = any(
+            job for job in unresolved_cinder_jobs if job.is_appeal
+        )
+
         # Special logic for availability of reject/approve multiple action:
         if version_is_unlisted:
             can_reject_multiple = is_appropriate_reviewer
@@ -574,9 +538,11 @@ class ReviewHelper:
                 and not version_is_blocked
             ),
             'allows_reasons': not is_static_theme,
-            'resolves_abuse_reports': True,
+            'resolves_cinder_jobs': True,
             'requires_reasons': False,
+            'requires_reasons_for_cinder_jobs': False,
             'boilerplate_text': 'Thank you for your contribution.',
+            'can_attach': True,
         }
         actions['reject'] = {
             'method': self.handler.reject_latest_version,
@@ -597,8 +563,9 @@ class ReviewHelper:
                 and is_appropriate_reviewer
             ),
             'allows_reasons': True,
-            'resolves_abuse_reports': True,
+            'resolves_cinder_jobs': True,
             'requires_reasons': not is_static_theme,
+            'requires_reasons_for_cinder_jobs': True,
         }
         actions['approve_content'] = {
             'method': self.handler.approve_content,
@@ -632,7 +599,7 @@ class ReviewHelper:
                 and current_or_latest_listed_version_was_auto_approved
                 and is_appropriate_reviewer_post_review
             ),
-            'resolves_abuse_reports': True,
+            'resolves_cinder_jobs': True,
         }
         actions['approve_multiple_versions'] = {
             'method': self.handler.approve_multiple_versions,
@@ -645,14 +612,15 @@ class ReviewHelper:
             ),
             'available': (can_approve_multiple),
             'allows_reasons': not is_static_theme,
+            'resolves_cinder_jobs': True,
             'requires_reasons': False,
-            'resolves_abuse_reports': True,
+            'requires_reasons_for_cinder_jobs': False,
         }
         actions['reject_multiple_versions'] = {
             'method': self.handler.reject_multiple_versions,
             'label': 'Reject Multiple Versions',
             'minimal': True,
-            'delayable': True,
+            'delayable': is_appropriate_admin_reviewer,
             'multiple_versions': True,
             'details': (
                 'This will reject the selected versions. '
@@ -660,8 +628,9 @@ class ReviewHelper:
             ),
             'available': (can_reject_multiple),
             'allows_reasons': True,
-            'resolves_abuse_reports': True,
+            'resolves_cinder_jobs': True,
             'requires_reasons': not is_static_theme,
+            'requires_reasons_for_cinder_jobs': True,
         }
         actions['unreject_latest_version'] = {
             'method': self.handler.unreject_latest_version,
@@ -723,15 +692,18 @@ class ReviewHelper:
             'available': (
                 not is_static_theme and version_is_unlisted and is_appropriate_reviewer
             ),
-            'resolves_abuse_reports': True,
+            'resolves_cinder_jobs': True,
         }
-        actions['clear_pending_rejection_multiple_versions'] = {
-            'method': self.handler.clear_pending_rejection_multiple_versions,
-            'label': 'Clear pending rejection',
+        actions['change_or_clear_pending_rejection_multiple_versions'] = {
+            'method': self.handler.change_or_clear_pending_rejection_multiple_versions,
+            'label': 'Change pending rejection',
             'details': (
-                'Clear pending rejection from selected versions, but '
-                "otherwise don't change the version(s) or add-on statuses."
+                'Change or clear pending rejection from selected versions, '
+                "but otherwise don't change the version(s) or add-on "
+                'statuses. Developer will be notified of the new pending '
+                'rejection date unless the action clears it.'
             ),
+            'delayable': True,
             'multiple_versions': True,
             'minimal': True,
             'comments': False,
@@ -748,7 +720,6 @@ class ReviewHelper:
             'minimal': True,
             'comments': False,
             'available': is_appropriate_admin_reviewer,
-            'resolves_abuse_reports': True,
         }
         actions['set_needs_human_review_multiple_versions'] = {
             'method': self.handler.set_needs_human_review_multiple_versions,
@@ -765,9 +736,10 @@ class ReviewHelper:
             'method': self.handler.reviewer_reply,
             'label': 'Reviewer reply',
             'details': (
-                'This will send a message to the developer. '
-                'You will be notified when they reply.'
+                'This will send a message to the developer, attached to the '
+                'selected version(s). You will be notified when they reply.'
             ),
+            'multiple_versions': True,
             'minimal': True,
             'available': (
                 self.version is not None
@@ -811,7 +783,8 @@ class ReviewHelper:
                 and not addon_is_not_disabled
                 and is_appropriate_admin_reviewer
             ),
-            'resolves_abuse_reports': True,
+            'resolves_cinder_jobs': True,
+            'can_attach': False,
         }
         actions['disable_addon'] = {
             'method': self.handler.disable_addon,
@@ -825,15 +798,54 @@ class ReviewHelper:
                 addon_is_not_disabled_or_deleted and is_appropriate_admin_reviewer
             ),
             'allows_reasons': True,
+            'resolves_cinder_jobs': True,
             'requires_reasons': not is_static_theme,
-            'resolves_abuse_reports': True,
+            'requires_reasons_for_cinder_jobs': True,
+            'can_attach': False,
+        }
+        actions['resolve_reports_job'] = {
+            'method': self.handler.resolve_reports_job,
+            'label': 'Resolve Reports',
+            'details': (
+                'Allows abuse report jobs to be resolved without an action on the '
+                'add-on or versions.'
+            ),
+            'minimal': True,
+            'available': is_reviewer and has_unresolved_abuse_report_jobs,
+            'comments': False,
+            'resolves_cinder_jobs': True,
+            'requires_policies': True,
+        }
+        actions['resolve_appeal_job'] = {
+            'method': self.handler.resolve_appeal_job,
+            'label': 'Resolve Appeals',
+            'details': (
+                'Allows abuse report jobs to be resolved without an action on the '
+                'add-on or versions.'
+            ),
+            'minimal': True,
+            'available': is_reviewer and has_unresolved_appeal_jobs,
+            'resolves_cinder_jobs': True,
+        }
+        actions['request_legal_review'] = {
+            'method': self.handler.request_legal_review,
+            'label': 'Request review from Mozilla Legal',
+            'details': (
+                'If you have concerns about the legality of this add-on that requires '
+                "Mozilla's legal to investigate, enter your comments in the area "
+                'below. They will not be sent to the developer.'
+                'If it relates to an open abuse report job or appeal resolve then job.'
+            ),
+            'minimal': True,
+            'available': is_appropriate_reviewer,
+            'resolves_cinder_jobs': True,
         }
         actions['comment'] = {
             'method': self.handler.process_comment,
             'label': 'Comment',
             'details': (
-                'Make a comment on this version. The developer '
-                "won't be able to see this."
+                "Make a comment on this version. The developer won't be able to see "
+                'this.'
             ),
             'minimal': True,
             'available': is_reviewer,
@@ -851,17 +863,19 @@ class ReviewHelper:
         # automatically include them if some are present.
         if not action.get('comments', True):
             self.handler.data['comments'] = ''
+        self.handler.review_action = action
         return action['method']()
 
 
 class ReviewBase:
+    review_action = None  # set via ReviewHelper.process
+
     def __init__(
         self,
         *,
         addon,
         version,
         user,
-        review_type,
         content_review=False,
         human_review=True,
     ):
@@ -869,9 +883,6 @@ class ReviewBase:
         self.human_review = human_review
         self.addon = addon
         self.version = version
-        self.review_type = (
-            'theme_%s' if addon.type == amo.ADDON_STATICTHEME else 'extension_%s'
-        ) % review_type
         self.file = (
             self.version.file
             if self.version and self.version.file.status == amo.STATUS_AWAITING_REVIEW
@@ -899,6 +910,9 @@ class ReviewBase:
         if status == amo.STATUS_APPROVED:
             file.approval_date = datetime.now()
         file.status = status
+        if status == amo.STATUS_DISABLED:
+            file.original_status = amo.STATUS_NULL
+            file.status_disabled_reason = File.STATUS_DISABLED_REASONS.NONE
         file.save()
 
     def set_promoted(self, versions=None):
@@ -918,31 +932,135 @@ class ReviewBase:
             for version in versions:
                 self.addon.promotedaddon.approve_for_version(version)
 
-    def notify_decision(self):
-        if cinder_jobs := self.data.get('resolve_cinder_jobs', ()):
-            # with appeals and escalations there could be multiple jobs
-            for cinder_job in cinder_jobs:
-                resolve_job_in_cinder.delay(
-                    cinder_job_id=cinder_job.id, log_entry_id=self.log_entry.id
-                )
-        else:
-            notify_addon_decision_to_cinder.delay(
-                log_entry_id=self.log_entry.id, addon_id=self.addon.id
+    def update_queue_history(self, log_entry):
+        if log_entry:
+            # Each entry in the ReviewQueueHistory corresponding to a version
+            # we are affecting and that doesn't already have a review decision
+            # log should get one. The exit_date will be cleared separately in
+            # Version.reset_due_date(), and the combination of those two pieces
+            # of information means the version left the queue because of a
+            # reviewer action.
+            ReviewQueueHistory.objects.filter(
+                version__in=log_entry.versionlog_set.all().values_list(
+                    'version', flat=True
+                ),
+                review_decision_log__isnull=True,
+            ).update(review_decision_log=log_entry)
+
+    def record_decision(
+        self,
+        activity_action,
+        *,
+        log_action_kw=None,
+        decision_metadata=None,
+        action_completed=True,
+        versions=None,
+        update_queue_history=True,
+    ):
+        """Create the ContentDecision for the decision that's been made;
+        call log_action; then trigger a task to notify Cinder and/or interested parties
+        and/or carry out the action.
+
+        Not used by resolve_appeal_job."""
+        # footgun: if action_completed=True then we don't call log_action here
+        assert not log_action_kw or action_completed
+        reasons = (
+            self.data.get('reasons', [])
+            if self.review_action and self.review_action.get('allows_reasons')
+            else []
+        )
+        policies = [
+            reason.cinder_policy
+            for reason in reasons
+            if getattr(reason, 'cinder_policy', None)
+        ]
+        if self.review_action and self.review_action.get('requires_policies'):
+            policies.extend(self.data.get('cinder_policies', []))
+
+        cinder_action = getattr(activity_action, 'cinder_action', None)
+        if not cinder_action and policies:
+            cinder_action = (
+                # If there isn't a cinder_action from the activity action already, get
+                # it from the policy. There should only be one in the list as form
+                # validation raises for multiple cinder actions.
+                (actions := self.get_cinder_actions_from_policies(policies))
+                and actions[0].value
             )
+        assert cinder_action
+
+        versions = versions or ([self.version] if self.version else [])
+
+        decision_kw = {
+            'addon': self.addon,
+            'action': cinder_action,
+            'action_date': datetime.now() if action_completed else None,
+            'notes': self.data.get('comments', ''),
+            'reviewer_user': self.user,
+            'metadata': decision_metadata or {},
+        }
+
+        decisions = []
+
+        def create_decision():
+            decision = ContentDecision.objects.create(**decision_kw)
+            decision.policies.set(policies)
+            if versions:
+                decision.target_versions.set(versions)
+            decisions.append(decision)
+            return decision
+
+        if cinder_jobs := self.data.get('cinder_jobs_to_resolve', ()):
+            # with appeals and escalations there could be multiple jobs
+            for job in cinder_jobs:
+                decision = create_decision()
+                if job.decision:
+                    decision.update(override_of=job.decision)
+                else:
+                    job.update(decision=decision)
+        else:
+            create_decision()
+
+        log_entry = None
+        if action_completed:
+            log_entry = self.log_action(
+                activity_action,
+                decisions=decisions,
+                reasons=reasons,
+                policies=policies,
+                **(log_action_kw or {}),
+            )
+            if update_queue_history:
+                self.update_queue_history(log_entry)
+        for decision in decisions:
+            log_entry = decision.execute_action()
+            if not action_completed:
+                ReviewActionReasonLog.objects.bulk_create(
+                    ReviewActionReasonLog(reason=reason, activity_log=log_entry)
+                    for reason in reasons
+                )
+                self.log_attachment(log_entry)
+                if update_queue_history:
+                    self.update_queue_history(log_entry)
+            report_decision_to_cinder_and_notify.delay(decision_id=decision.id)
 
     def clear_all_needs_human_review_flags_in_channel(self, mad_too=True):
         """Clear needs_human_review flags on all versions in the same channel.
 
+        Doesn't clear abuse or appeal related flags.
         To be called when approving a listed version: For listed, the version
         reviewers are approving is always the latest listed one, and then users
         are supposed to automatically get the update to that version, so we
         don't need to care about older ones anymore.
         """
-        # Do a mass UPDATE.
+        # Do a mass UPDATE. The NeedsHumanReview coming from abuse/appeal/escalations
+        # are only cleared in ContentDecision.execute_action() if the
+        # reviewer has selected to resolve all jobs of that type though.
         NeedsHumanReview.objects.filter(
             version__addon=self.addon,
             version__channel=self.version.channel,
             is_active=True,
+        ).exclude(
+            reason__in=NeedsHumanReview.REASONS.ABUSE_OR_APPEAL_RELATED.values
         ).update(is_active=False)
         if mad_too:
             # Another one for the needs_human_review_by_mad flag.
@@ -954,9 +1072,16 @@ class ReviewBase:
         # versions.
         self.addon.update_all_due_dates()
 
-    def clear_specific_needs_human_review_flags(self, version):
+    def clear_specific_needs_human_review_flags(
+        self, version, *, abuse_appeal_too=False
+    ):
         """Clear needs_human_review flags on a specific version."""
-        version.needshumanreview_set.filter(is_active=True).update(is_active=False)
+        qs = version.needshumanreview_set.filter(is_active=True)
+        if not abuse_appeal_too:
+            qs = qs.exclude(
+                reason__in=NeedsHumanReview.REASONS.ABUSE_OR_APPEAL_RELATED.values
+            )
+        qs.update(is_active=False)
         if version.needs_human_review_by_mad:
             version.reviewerflags.update(needs_human_review_by_mad=False)
         # Because the updating of needs human review was made with a queryset
@@ -964,29 +1089,37 @@ class ReviewBase:
         # explicitly.
         version.reset_due_date()
 
+    def get_cinder_actions_from_policies(self, policies):
+        return list(
+            {
+                DECISION_ACTIONS.for_value(policy.default_cinder_action)
+                for policy in policies
+                if getattr(policy, 'default_cinder_action', None)
+            }
+        )
+
     def log_action(
         self,
         action,
         *,
         version=None,
         versions=None,
-        file=None,
         timestamp=None,
         user=None,
         extra_details=None,
+        decisions=None,
+        reasons=None,
+        policies=None,
     ):
         details = {
             'comments': self.data.get('comments', ''),
-            'reviewtype': self.review_type.split('_')[1],
             'human_review': self.human_review,
             **(extra_details or {}),
         }
         if version is None and self.version:
             version = self.version
 
-        if file is not None:
-            details['files'] = [file.id]
-        elif self.file:
+        if self.file:
             details['files'] = [self.file.id]
 
         if version is not None:
@@ -1001,21 +1134,39 @@ class ReviewBase:
         if timestamp is None:
             timestamp = datetime.now()
 
-        args = (*args, *self.data.get('reasons', []))
+        args = (*args, *(reasons or ()), *(policies or ()), *(decisions or ()))
         kwargs = {'user': user or self.user, 'created': timestamp, 'details': details}
-        self.log_entry = ActivityLog.objects.create(action, *args, **kwargs)
+        log_entry = ActivityLog.objects.create(action, *args, **kwargs)
+        self.log_attachment(log_entry)
+        return log_entry
+
+    def log_attachment(self, log_entry):
+        attachment = None
+        if self.data.get('attachment_file'):
+            attachment = self.data.get('attachment_file')
+        elif self.data.get('attachment_input'):
+            # The name will be overridden later by attachment_upload_path.
+            attachment = ContentFile(
+                self.data['attachment_input'], name='attachment.txt'
+            )
+        if attachment is not None:
+            AttachmentLog.objects.create(activity_log=log_entry, file=attachment)
 
     def reviewer_reply(self):
         # Default to reviewer reply action.
         action = amo.LOG.REVIEWER_REPLY_VERSION
+        self.version = None
+        self.file = None
+        versions = self.data['versions']
         log.info(
-            'Sending reviewer reply for %s to authors and other'
-            'recipients' % self.addon
+            'Sending reviewer reply for %s versions %s to authors and other'
+            'recipients' % (self.addon, map(str, versions))
         )
-        self.log_action(action)
-        notify_about_activity_log(
-            self.addon, self.version, self.log_entry, perm_setting='individual_contact'
-        )
+        log_entry = self.log_action(action, versions=versions)
+        for version in versions:
+            notify_about_activity_log(
+                self.addon, version, log_entry, perm_setting='individual_contact'
+            )
 
     def sign_file(self):
         assert not (self.version and self.version.is_blocked)
@@ -1028,6 +1179,49 @@ class ReviewBase:
 
     def process_comment(self):
         self.log_action(amo.LOG.COMMENT_VERSION)
+
+    def resolve_reports_job(self):
+        if self.data.get('cinder_jobs_to_resolve', ()):
+            self.record_decision(amo.LOG.RESOLVE_CINDER_JOB_WITH_NO_ACTION)
+
+    def resolve_appeal_job(self):
+        # It's possible to have multiple appeal jobs, so handle them seperately.
+        for job in self.data.get('cinder_jobs_to_resolve', ()):
+            # collect all the policies we made decisions under
+            previous_policies = CinderPolicy.objects.filter(
+                contentdecision__appeal_job=job
+            ).distinct()
+            # we just need a single action for this appeal
+            # - use min() to favor AMO_DISABLE_ADDON over AMO_REJECT_VERSION_ADDON
+            previous_action_id = min(
+                decision.action for decision in job.appealed_decisions.all()
+            )
+            previous_versions = Version.unfiltered.filter(
+                contentdecision__appeal_job=job
+            ).distinct()
+            # notify cinder
+            decision = ContentDecision.objects.create(
+                addon=self.addon,
+                action=previous_action_id,
+                action_date=datetime.now(),
+                notes=self.data.get('comments', ''),
+                reviewer_user=self.user,
+            )
+            decision.policies.set(list(previous_policies))
+            decision.target_versions.set(previous_versions)
+            if job.decision:
+                decision.update(override_of=job.decision)
+            else:
+                job.update(decision=decision)
+            self.log_action(
+                amo.LOG.DENY_APPEAL_JOB,
+                versions=previous_versions,
+                decisions=[decision],
+                policies=previous_policies,
+            )
+            log_entry = decision.execute_action()
+            self.update_queue_history(log_entry)
+            report_decision_to_cinder_and_notify.delay(decision_id=decision.id)
 
     def approve_latest_version(self):
         """Approve the add-on latest version (potentially setting the add-on to
@@ -1074,9 +1268,12 @@ class ReviewBase:
             # Automatic approval, reset the counter.
             AddonApprovalsCounter.reset_for_addon(addon=self.addon)
 
-        self.log_action(amo.LOG.APPROVE_VERSION)
-        log.info('Sending email for %s' % (self.addon))
-        self.notify_decision()
+        if self.human_review or self.addon.type != amo.ADDON_LPAPP:
+            # Don't notify decisions (to cinder or owners) for auto-approved langpacks
+            log.info('Sending email for %s' % (self.addon))
+            self.record_decision(amo.LOG.APPROVE_VERSION)
+        else:
+            self.log_action(amo.LOG.APPROVE_VERSION)
         self.log_public_message()
 
     def reject_latest_version(self):
@@ -1090,21 +1287,14 @@ class ReviewBase:
         # (it should use reject_multiple_versions instead).
         assert not self.content_review
 
-        self.set_file(amo.STATUS_DISABLED, self.file)
-        if self.set_addon_status:
-            self.set_addon()
-
+        log.info('Sending email for %s' % (self.addon))
+        self.record_decision(amo.LOG.REJECT_VERSION, action_completed=False)
         if self.human_review:
             # Clear needs human review flags, but only on the latest version:
             # it's the only version we can be certain that the reviewer looked
             # at.
             self.clear_specific_needs_human_review_flags(self.version)
             self.set_human_review_date()
-
-        self.log_action(amo.LOG.REJECT_VERSION)
-        log.info('Sending email for %s' % (self.addon))
-        # This call has to happen after log_action - we need self.log_entry
-        self.notify_decision()
         self.log_sandbox_message()
 
     def request_admin_review(self):
@@ -1157,8 +1347,6 @@ class ReviewBase:
             # For unlisted, we just use self.version.
             version = self.version
 
-        self.log_action(amo.LOG.CONFIRM_AUTO_APPROVED, version=version)
-
         if self.human_review:
             self.set_promoted()
             # Mark the approval as confirmed (handle DoesNotExist, it may have
@@ -1190,26 +1378,33 @@ class ReviewBase:
                 pending_content_rejection=None,
             )
             self.set_human_review_date(version)
-            self.notify_decision()
+            self.record_decision(
+                amo.LOG.CONFIRM_AUTO_APPROVED,
+                versions=[version],
+                log_action_kw={'version': version},
+            )
+        else:
+            self.log_action(amo.LOG.CONFIRM_AUTO_APPROVED, version=version)
 
     def reject_multiple_versions(self):
         """Reject a list of versions.
-        Note: this is used in blocklist.utils.disable_addon_for_block for both
-        listed and unlisted versions (human_review=False)."""
-        # self.version and self.file won't point to the versions we want to
-        # modify in this action, so set them to None before finding the right
-        # versions.
+        This should only be used by direct reviewer actions (human_review=True).
+        See auto_reject_multiple_versions also, that can handle delayed rejections from
+        different reviewers"""
+        assert self.human_review is True
         channel = self.version.channel if self.version else None
         self.version = None
         self.file = None
-        now = datetime.now()
-        if self.data.get('delayed_rejection'):
-            pending_rejection_deadline = now + timedelta(
-                days=int(self.data['delayed_rejection_days'])
-            )
-        else:
-            pending_rejection_deadline = None
-        if pending_rejection_deadline:
+        decision_metadata = {
+            'content_review': self.content_review,
+        }
+
+        if self.data.get('delayed_rejection') and self.data.get(
+            'delayed_rejection_date'
+        ):
+            decision_metadata['delayed_rejection_date'] = self.data.get(
+                'delayed_rejection_date'
+            ).isoformat()
             action_id = (
                 amo.LOG.REJECT_CONTENT_DELAYED
                 if self.content_review
@@ -1229,14 +1424,62 @@ class ReviewBase:
                 'Making %s versions %s disabled'
                 % (self.addon, ', '.join(str(v.pk) for v in self.data['versions']))
             )
-        # For a human review we record a single action, but for automated
-        # stuff, we need to split by type (content review or not) and by
-        # original user to match the original user(s) and action(s).
+
+        for version in self.data['versions']:
+            # Clear needs human review flags on rejected versions, we
+            # consider that the reviewer looked at them before rejecting.
+            self.clear_specific_needs_human_review_flags(version)
+            self.set_human_review_date(version)
+
+        # A human rejection (delayed or not) implies the next version in the
+        # same channel should be manually reviewed.
+        auto_approval_disabled_until_next_approval_flag = (
+            'auto_approval_disabled_until_next_approval'
+            if channel == amo.CHANNEL_LISTED
+            else 'auto_approval_disabled_until_next_approval_unlisted'
+        )
+        AddonReviewerFlags.objects.update_or_create(
+            addon=self.addon,
+            defaults={auto_approval_disabled_until_next_approval_flag: True},
+        )
+        log.info('Sending email for %s' % (self.addon))
+        self.record_decision(
+            action_id,
+            versions=self.data['versions'],
+            decision_metadata=decision_metadata,
+            action_completed=False,
+        )
+
+    def auto_reject_multiple_versions(self):
+        """Immediately reject a list of versions, either from previously
+        delayed rejections or from versions being blocked.
+
+        Note: this is not accessible through reviewer tools UI, but because it
+        is triggered for rejections coming from a block being created,
+        self.human_review can be True."""
+        # self.version and self.file won't point to the versions we want to
+        # modify in this action, so set them to None before finding the right
+        # versions.
+        channel = self.version.channel if self.version else None
+        self.version = None
+        self.file = None
+        now = datetime.now()
+
+        action_id = (
+            amo.LOG.REJECT_CONTENT if self.content_review else amo.LOG.REJECT_VERSION
+        )
+        log.info(
+            'Making %s versions %s disabled'
+            % (self.addon, ', '.join(str(v.pk) for v in self.data['versions']))
+        )
+        # For an immediate rejection we record a single action, but for
+        # applying a delayed rejection, we need to split by type (content
+        # review or not) and by original user to match the original user(s)
+        # and action(s).
         actions_to_record = defaultdict(lambda: defaultdict(list))
         for version in self.data['versions']:
             file = version.file
-            if not pending_rejection_deadline:
-                self.set_file(amo.STATUS_DISABLED, file)
+            self.set_file(amo.STATUS_DISABLED, file)
 
             if (
                 not self.human_review
@@ -1244,26 +1487,21 @@ class ReviewBase:
                 and flags.pending_rejection
             ):
                 action_id = (
-                    amo.LOG.REJECT_CONTENT
+                    amo.LOG.AUTO_REJECT_CONTENT_AFTER_DELAY_EXPIRED
                     if flags.pending_content_rejection
-                    else amo.LOG.REJECT_VERSION
+                    else amo.LOG.AUTO_REJECT_VERSION_AFTER_DELAY_EXPIRED
                 )
             if self.human_review:
                 # Clear needs human review flags on rejected versions, we
                 # consider that the reviewer looked at them before rejecting.
                 self.clear_specific_needs_human_review_flags(version)
-                # (Re)set pending_rejection. Could be reset to None if doing an
-                # immediate rejection.
+                # Reset pending_rejection.
                 VersionReviewerFlags.objects.update_or_create(
                     version=version,
                     defaults={
-                        'pending_rejection': pending_rejection_deadline,
-                        'pending_rejection_by': self.user
-                        if pending_rejection_deadline
-                        else None,
-                        'pending_content_rejection': self.content_review
-                        if pending_rejection_deadline
-                        else None,
+                        'pending_rejection': None,
+                        'pending_rejection_by': None,
+                        'pending_content_rejection': None,
                     },
                 )
                 self.set_human_review_date(version)
@@ -1273,45 +1511,43 @@ class ReviewBase:
                     version
                 )
 
+        addonreviewerflags = {}
+        # A human rejection (delayed or not) implies the next version in the
+        # same channel should be manually reviewed.
+        if self.human_review:
+            auto_approval_disabled_until_next_approval_flag = (
+                'auto_approval_disabled_until_next_approval'
+                if channel == amo.CHANNEL_LISTED
+                else 'auto_approval_disabled_until_next_approval_unlisted'
+            )
+            addonreviewerflags[auto_approval_disabled_until_next_approval_flag] = True
+        # The versions rejected might require the add-on status to change.
+        self.addon.update_status()
+        if addonreviewerflags:
+            AddonReviewerFlags.objects.update_or_create(
+                addon=self.addon,
+                defaults=addonreviewerflags,
+            )
+
+        keys = [
+            'is_addon_being_blocked',
+            'is_addon_being_disabled',
+        ]
+        extra_details = {key: self.data[key] for key in keys if key in self.data}
         for action_id, user_and_versions in actions_to_record.items():
             for user, versions in user_and_versions.items():
-                self.log_action(
+                log.info('Sending email for %s' % (self.addon))
+                self.record_decision(
                     action_id,
                     versions=versions,
-                    timestamp=now,
-                    user=user,
-                    extra_details=(
-                        {'delayed_rejection_days': self.data['delayed_rejection_days']}
-                        if 'delayed_rejection_days' in self.data
-                        else {}
-                    ),
+                    decision_metadata=extra_details,
+                    log_action_kw={
+                        'versions': versions,
+                        'timestamp': now,
+                        'user': user,
+                        'extra_details': extra_details,
+                    },
                 )
-
-        # A rejection (delayed or not) implies the next version should be
-        # manually reviewed.
-        auto_approval_disabled_until_next_approval_flag = (
-            'auto_approval_disabled_until_next_approval'
-            if channel == amo.CHANNEL_LISTED
-            else 'auto_approval_disabled_until_next_approval_unlisted'
-        )
-        addonreviewerflags = {
-            auto_approval_disabled_until_next_approval_flag: True,
-        }
-        if pending_rejection_deadline:
-            # Developers should be notified again once the deadline is close.
-            addonreviewerflags['notified_about_expiring_delayed_rejections'] = False
-        else:
-            # An immediate rejection might require the add-on status to change.
-            self.addon.update_status()
-        AddonReviewerFlags.objects.update_or_create(
-            addon=self.addon,
-            defaults=addonreviewerflags,
-        )
-
-        if actions_to_record:
-            # if we didn't record any actions we didn't do anything so nothing to notify
-            log.info('Sending email for %s' % (self.addon))
-            self.notify_decision()
 
     def unreject_latest_version(self):
         """Un-reject the latest version."""
@@ -1347,10 +1583,12 @@ class ReviewBase:
             # Do it one by one to trigger the post_save().
             self.clear_specific_needs_human_review_flags(version)
         # Record a single activity log.
-        self.log_action(
+        log_entry = self.log_action(
             amo.LOG.CLEAR_NEEDS_HUMAN_REVIEW, versions=self.data['versions']
         )
-        self.notify_decision()
+        # This action doesn't need to be recorded in Cinder but we still need
+        # to update the queue history.
+        self.update_queue_history(log_entry)
 
     def set_needs_human_review_multiple_versions(self):
         """Record human review flag on selected versions."""
@@ -1369,35 +1607,71 @@ class ReviewBase:
             versions=self.data['versions'],
         )
 
-    def clear_pending_rejection_multiple_versions(self):
-        """Clear pending rejection on selected versions."""
+    def change_or_clear_pending_rejection_multiple_versions(self):
+        """Change/clear pending rejection on selected versions."""
         self.file = None
         self.version = None
+        extra_details = {}
+        if self.data.get('delayed_rejection') and self.data.get(
+            'delayed_rejection_date'
+        ):
+            pending_rejection_deadline = self.data['delayed_rejection_date']
+            extra_details['new_deadline'] = pending_rejection_deadline.isoformat()[:16]
+        else:
+            pending_rejection_deadline = None
+
         for version in self.data['versions']:
-            # Do it one by one to trigger the post_save().
+            # Do it one by one to trigger the post_save() for each version.
             if version.pending_rejection:
-                version.reviewerflags.update(
-                    pending_rejection=None,
-                    pending_rejection_by=None,
-                    pending_content_rejection=None,
-                )
-        # Record a single activity log.
-        self.log_action(amo.LOG.CLEAR_PENDING_REJECTION, versions=self.data['versions'])
+                extra_details['old_deadline'] = version.pending_rejection.isoformat()[
+                    :16
+                ]
+                kwargs = {
+                    'pending_rejection': pending_rejection_deadline,
+                }
+                if not pending_rejection_deadline:
+                    kwargs.update(
+                        {
+                            'pending_rejection_by': None,
+                            'pending_content_rejection': None,
+                        }
+                    )
+                version.reviewerflags.update(**kwargs)
+
+        if pending_rejection_deadline:
+            log.info('Sending email for %s' % (self.addon))
+            self.record_decision(
+                amo.LOG.CHANGE_PENDING_REJECTION,
+                log_action_kw={
+                    'versions': self.data['versions'],
+                    'extra_details': extra_details,
+                },
+                update_queue_history=False,  # This action doesn't affect the queue.
+            )
+        else:
+            # When clearing, we don't notify the developer, so we only log the
+            # activity.
+            self.log_action(
+                amo.LOG.CLEAR_PENDING_REJECTION, versions=self.data['versions']
+            )
 
     def enable_addon(self):
         """Force enable the add-on."""
         self.version = None
         self.addon.force_enable(skip_activity_log=True)
-        self.log_action(amo.LOG.FORCE_ENABLE)
         log.info('Sending email for %s' % (self.addon))
-        self.notify_decision()
+        self.record_decision(amo.LOG.FORCE_ENABLE)
 
     def disable_addon(self):
         """Force disable the add-on and all versions."""
-        self.addon.force_disable(skip_activity_log=True)
-        self.log_action(amo.LOG.FORCE_DISABLE)
         log.info('Sending email for %s' % (self.addon))
-        self.notify_decision()
+        self.record_decision(amo.LOG.FORCE_DISABLE, action_completed=False)
+
+    def request_legal_review(self):
+        """Forward add-on and/or job to legal via Cinder."""
+        log.info('Forwarding %s for legal review' % (self.addon))
+        self.clear_all_needs_human_review_flags_in_channel()
+        self.record_decision(amo.LOG.REQUEST_LEGAL, action_completed=False)
 
 
 class ReviewAddon(ReviewBase):
@@ -1440,8 +1714,6 @@ class ReviewUnlisted(ReviewBase):
 
         self.set_file(amo.STATUS_APPROVED, self.file)
 
-        self.log_action(amo.LOG.APPROVE_VERSION)
-
         if self.human_review:
             self.set_promoted()
             self.clear_specific_needs_human_review_flags(self.version)
@@ -1474,7 +1746,7 @@ class ReviewUnlisted(ReviewBase):
             % (self.addon, self.file.file.name if self.file else '')
         )
         log.info('Sending email for %s' % (self.addon))
-        self.notify_decision()
+        self.record_decision(amo.LOG.APPROVE_VERSION)
 
     def block_multiple_versions(self):
         versions = self.data['versions']
@@ -1490,9 +1762,9 @@ class ReviewUnlisted(ReviewBase):
         # recorded against the specific versions we are confirming approval of.
         self.version = None
         self.file = None
+        versions = self.data['versions']
 
-        timestamp = datetime.now()
-        for version in self.data['versions']:
+        for version in versions:
             if self.human_review:
                 # Mark summary as confirmed if it exists.
                 try:
@@ -1504,12 +1776,11 @@ class ReviewUnlisted(ReviewBase):
                 self.clear_specific_needs_human_review_flags(version)
                 self.set_human_review_date(version)
 
-        self.log_action(
+        self.record_decision(
             amo.LOG.CONFIRM_AUTO_APPROVED,
-            versions=self.data['versions'],
-            timestamp=timestamp,
+            versions=versions,
+            log_action_kw={'versions': versions},
         )
-        self.notify_decision()
 
     def approve_multiple_versions(self):
         """Set multiple unlisted add-on versions files to public."""
@@ -1519,12 +1790,12 @@ class ReviewUnlisted(ReviewBase):
         # recorded against the specific versions we are approving.
         self.version = None
         self.file = None
+        versions = self.data['versions']
 
-        if not self.data['versions']:
+        if not versions:
             return
 
-        timestamp = datetime.now()
-        for version in self.data['versions']:
+        for version in versions:
             # Sign addon.
             assert not version.is_blocked
             if version.file.status == amo.STATUS_AWAITING_REVIEW:
@@ -1537,19 +1808,21 @@ class ReviewUnlisted(ReviewBase):
                 self.clear_specific_needs_human_review_flags(version)
             log.info('Making %s files %s public' % (self.addon, version.file.file.name))
 
-        self.log_action(
-            amo.LOG.APPROVE_VERSION, versions=self.data['versions'], timestamp=timestamp
-        )
-
         if self.human_review:
-            self.set_promoted(versions=self.data['versions'])
+            self.set_promoted(versions=versions)
             # An approval took place so we can reset this.
             AddonReviewerFlags.objects.update_or_create(
                 addon=self.addon,
                 defaults={'auto_approval_disabled_until_next_approval_unlisted': False},
             )
             log.info('Sending email(s) for %s' % (self.addon))
-            self.notify_decision()
+            self.record_decision(
+                amo.LOG.APPROVE_VERSION,
+                versions=versions,
+                log_action_kw={'versions': versions},
+            )
+        else:
+            self.log_action(amo.LOG.APPROVE_VERSION, versions=versions)
 
     def unreject_multiple_versions(self):
         """Un-reject a list of versions."""
@@ -1569,11 +1842,7 @@ class ReviewUnlisted(ReviewBase):
         for version in self.data['versions']:
             self.set_file(amo.STATUS_AWAITING_REVIEW, version.file)
 
-        self.log_action(
-            amo.LOG.UNREJECT_VERSION,
-            versions=self.data['versions'],
-            user=self.user,
-        )
+        self.log_action(amo.LOG.UNREJECT_VERSION, versions=self.data['versions'])
 
         if self.data['versions']:
             # if these are listed versions then the addon status may need updating

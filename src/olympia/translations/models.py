@@ -4,7 +4,7 @@ from django.db import connections, models, router
 from django.db.models.deletion import Collector
 
 import bleach
-from bleach.linkifier import URL_RE  # build_url_re() with good defaults.
+import markdown as md
 
 import olympia.core.logger
 from olympia.amo.fields import PositiveAutoField
@@ -165,7 +165,37 @@ class Translation(ModelBase):
         return trans
 
 
-class PurifiedTranslation(Translation):
+class PureTranslation(Translation):
+    """Run the string through bleach to get version with escaped HTML."""
+
+    allowed_tags = []
+    allowed_attributes = {}
+
+    class Meta:
+        proxy = True
+
+    def __str__(self):
+        if not self.localized_string_clean:
+            self.clean()
+        return str(self.localized_string_clean)
+
+    def __truncate__(self, length, killwords, end):
+        return utils.truncate(str(self), length, killwords, end)
+
+    def clean(self):
+        from olympia.amo.utils import clean_nl
+
+        cleaned = self.clean_localized_string()
+        self.localized_string_clean = clean_nl(cleaned).strip()
+
+    def clean_localized_string(self):
+        cleaner = bleach.Cleaner(
+            tags=self.allowed_tags, attributes=self.allowed_attributes
+        )
+        return cleaner.clean(str(self.localized_string))
+
+
+class PurifiedTranslation(PureTranslation):
     """Run the string through bleach to get a safe version."""
 
     allowed_tags = [
@@ -188,41 +218,59 @@ class PurifiedTranslation(Translation):
         'acronym': ['title'],
     }
 
+    # All links (text and markup) are normalized.
+    linkify_filter = partial(
+        bleach.linkifier.LinkifyFilter,
+        callbacks=[linkify_bounce_url_callback, bleach.callbacks.nofollow],
+    )
+
     class Meta:
         proxy = True
-
-    def __str__(self):
-        if not self.localized_string_clean:
-            self.clean()
-        return str(self.localized_string_clean)
 
     def __html__(self):
         return str(self)
 
-    def __truncate__(self, length, killwords, end):
-        return utils.truncate(str(self), length, killwords, end)
-
-    def clean(self):
-        from olympia.amo.utils import clean_nl
-
-        super().clean()
-        cleaned = self.clean_localized_string()
-        self.localized_string_clean = clean_nl(cleaned).strip()
-
     def clean_localized_string(self):
-        # All links (text and markup) are normalized.
-        linkify_filter = partial(
-            bleach.linkifier.LinkifyFilter,
-            callbacks=[linkify_bounce_url_callback, bleach.callbacks.nofollow],
-        )
         # Keep only the allowed tags and attributes, escape the rest.
         cleaner = bleach.Cleaner(
             tags=self.allowed_tags,
             attributes=self.allowed_attributes,
-            filters=[linkify_filter],
+            filters=[self.linkify_filter],
         )
 
         return cleaner.clean(str(self.localized_string))
+
+    @classmethod
+    def get_allowed_tags(cls):
+        return ', '.join(cls.allowed_tags)
+
+
+class PurifiedMarkdownTranslation(PurifiedTranslation):
+    class Meta:
+        proxy = True
+
+    def clean_localized_string(self):
+        # bleach user-inputted html
+        cleaned = (
+            bleach.clean(self.localized_string, tags=[], attributes={})
+            if self.localized_string
+            else ''
+        )
+        # hack; cleaning breaks blockquotes
+        text_with_brs = cleaned.replace('&gt;', '>')
+        # the base syntax of markdown library does not provide abbreviations or fenced
+        # code. see https://python-markdown.github.io/extensions/
+        markdown = md.markdown(text_with_brs, extensions=['abbr', 'fenced_code'])
+
+        # Keep only the allowed tags and attributes, strip the rest.
+        cleaner = bleach.Cleaner(
+            tags=self.allowed_tags,
+            attributes=self.allowed_attributes,
+            filters=[self.linkify_filter],
+            strip=True,
+        )
+
+        return cleaner.clean(markdown)
 
 
 class LinkifiedTranslation(PurifiedTranslation):
@@ -234,28 +282,29 @@ class LinkifiedTranslation(PurifiedTranslation):
         proxy = True
 
 
-class NoURLsTranslation(Translation):
-    """Regular translation model, but with URLs stripped."""
+class NoURLsTranslation(PureTranslation):
+    """Strip the string of URLs and escape any HTML."""
 
     class Meta:
         proxy = True
 
     def __str__(self):
-        # Clean string if that hasn't been done already, like
-        # PurifiedTranslation does. Unlike PurifiedTranslation though, this
-        # class doesn't implement __html__(), because it's designed to contain
-        # only text. This means that it should be escaped by templates and API
-        # clients, as it can contain raw HTML.
+        # Clean string if that hasn't been done already. Unlike PurifiedTranslation,
+        # this class doesn't implement __html__(), because it's designed to contain
+        # only text. All raw HTML is escaped.
         if not self.localized_string_clean and self.localized_string:
             self.clean()
         return str(self.localized_string_clean)
 
     def clean(self):
-        # URL_RE is the regexp used by bleach to detect URLs to linkify them,
-        # in our case we use it to find them and replace them with nothing.
-        # It's more effective/aggressive than something like r'http\S+', it can
-        # also detect things like foo.com.
-        self.localized_string_clean = URL_RE.sub('', self.localized_string).strip()
+        from olympia.amo.utils import URL_RE
+
+        super().clean()
+        self.localized_string_clean = (
+            URL_RE.sub('', self.localized_string_clean).strip()
+            if self.localized_string_clean
+            else self.localized_string_clean
+        )
 
 
 class TranslationSequence(models.Model):

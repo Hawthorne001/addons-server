@@ -3,9 +3,9 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-05-14 15:43+0000\n"
-"PO-Revision-Date: 2023-03-04 21:44+0000\n"
-"Last-Translator: Top <teerapatxtop@yahoo.com>\n"
+"POT-Creation-Date: 2025-02-03 14:26+0000\n"
+"PO-Revision-Date: 2024-12-10 04:49+0000\n"
+"Last-Translator: aefgh39622@gmail.com <aefgh39622@gmail.com>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "Language: th\n"
 "MIME-Version: 1.0\n"
@@ -22,7 +22,7 @@ msgid "Select a file..."
 msgstr "เลือกไฟล์..."
 
 msgid "Your add-on should end with .zip, .xpi or .crx"
-msgstr "ส่วนเสริมของคุณควรลงท้ายด้วย .zip, .xpi, หรือ .crx"
+msgstr "ส่วนเสริมของคุณควรลงท้ายด้วย .zip .xpi หรือ .crx"
 
 #. L10n: {0} is the percent of the file that has been uploaded.
 #, python-format
@@ -42,7 +42,7 @@ msgid "Error with {0}"
 msgstr "เกิดข้อผิดพลาดกับ {0}"
 
 msgid "Please make sure to report any linting related issues on GitHub"
-msgstr "โปรดตรวจสอบให้แน่ใจว่าได้รายงานปัญหาที่เกี่ยวข้องกับ linting บน GitHub แล้ว"
+msgstr "โปรดอย่าลืมรายงานปัญหาที่เกี่ยวข้องกับการ Lint บน GitHub"
 
 msgid "Your add-on failed validation with {0} error."
 msgid_plural "Your add-on failed validation with {0} errors."
@@ -65,27 +65,27 @@ msgid "Received an empty response from the server; status: {0}"
 msgstr "ได้รับการตอบสนองที่ว่างเปล่าจากแม่ข่าย; สถานะ: {0}"
 
 msgid "Your extension has to be compatible with at least one application."
-msgstr ""
+msgstr "ส่วนขยายของคุณต้องเข้ากันได้กับอย่างน้อยหนึ่งแอปพลิเคชัน"
 
 msgid "Unexpected server error while validating."
-msgstr "เกิดข้อผิดพลาดเซิร์ฟเวอร์ที่ไม่คาดคิดขณะตรวจสอบ"
+msgstr "เกิดข้อผิดพลาดที่ไม่คาดคิดกับเซิร์ฟเวอร์ขณะตรวจสอบ"
 
 msgid "Explicitly marked as compatible with Firefox for Android in the manifest"
-msgstr ""
+msgstr "ระบุอย่างชัดเจนใน Manifest ว่าเข้ากันได้กับ Firefox สำหรับ Android"
 
 msgid "Finished validating {0}"
 msgstr "เสร็จสิ้นการตรวจสอบ {0}"
 
 msgid "Your add-on validation timed out, it will be manually reviewed."
-msgstr "หยุดพักการตรวจสอบส่วนเสริมของคุณชั่วคราว ส่วนเสริมของคุณจะถูกตรวจสอบแบบแมนนวล"
+msgstr "หยุดพักการตรวจสอบส่วนเสริมของคุณชั่วคราว ส่วนเสริมของคุณจะถูกตรวจสอบโดยมนุษย์"
 
 msgid "Your add-on was validated with no errors and {0} warning."
 msgid_plural "Your add-on was validated with no errors and {0} warnings."
-msgstr[0] "ส่วนเสริมของคุณผ่านการตรวจสอบโดยไม่มีข้อผิดพลาดและ {0} คำเตือนใด"
+msgstr[0] "ส่วนเสริมของคุณผ่านการตรวจสอบโดยไม่มีข้อผิดพลาดและ {0} คำเตือน"
 
 msgid "Your add-on was validated with no errors and {0} message."
 msgid_plural "Your add-on was validated with no errors and {0} messages."
-msgstr[0] "ส่วนเสริมของคุณผ่านการตรวจสอบโดยไม่มีข้อผิดพลาดและ {0} ข้อความใด"
+msgstr[0] "ส่วนเสริมของคุณผ่านการตรวจสอบโดยไม่มีข้อผิดพลาดและ {0} ข้อความ"
 
 msgid "Your add-on was validated with no errors or warnings."
 msgstr "ส่วนเสริมของคุณผ่านการตรวจสอบโดยไม่มีข้อผิดพลาดหรือคำเตือนใด"
@@ -102,11 +102,12 @@ msgstr "รายการตรวจสอบการส่งส่วนเ
 msgid "Please verify the following points before finalizing your submission. This will minimize delays or misunderstanding during the review process:"
 msgstr "โปรดตรวจสอบหัวข้อต่าง ๆ ก่อนส่งข้อมูลในขั้นสุดท้าย จะช่วยลดความล่าช้าหรือความเข้าใจผิดที่อาจเกิดขึ้นระหว่างทำการตรวจสอบ:"
 
-#, fuzzy
 msgid ""
 "Minified, concatenated or otherwise machine-generated scripts (excluding known libraries) need to have their sources submitted separately for review. Make sure that you use the source code upload "
 "field to avoid having your submission rejected."
-msgstr "ไบนารีที่คอมไพล์แล้ว รวมถึงสคริปต์ย่อหรือร่าง (ยกเว้นไลบรารีที่รู้จัก) ต้องส่งซอร์สแยกต่างหากเพื่อใช้สำหรับตรวจทาน ตรวจสอบให้แน่ใจว่า คุณใช้ช่องอัปโหลดซอร์สโค้ดเพื่อหลีกเลี่ยงไม่ให้ข้อมูลที่คุณส่งถูกปฏิเสธ"
+msgstr ""
+"สคริปต์ที่มีการย่อ เชื่อมโยงกัน หรือสร้างขึ้นด้วยเครื่อง (ยกเว้นไลบรารีที่รู้จัก) ต้องส่งซอร์สแยกต่างหากเพื่อใช้สำหรับตรวจทาน ตรวจสอบให้แน่ใจว่า "
+"คุณใช้ช่องอัปโหลดซอร์สโค้ดเพื่อหลีกเลี่ยงไม่ให้ข้อมูลที่คุณส่งถูกปฏิเสธ"
 
 msgid "The validation process found these issues that can lead to rejections:"
 msgstr "กระบวนการการตรวจสอบความถูกต้องพบปัญหาที่อาจก่อให้เกิดการปฏิเสธ:"
@@ -622,7 +623,7 @@ msgid "{name} was viewing this page first."
 msgstr "{name} ดูหน้านี้เป็นคนแรก"
 
 msgid "Review page polling failed."
-msgstr ""
+msgstr "การโพลล์หน้าตรวจทานล้มเหลว"
 
 msgid "{name} was viewing this add-on first."
 msgstr "{name} ดูส่วนเสริมนี้เป็นคนแรก"

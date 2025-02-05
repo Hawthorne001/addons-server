@@ -5,8 +5,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: REMORA 0.1\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-05-14 15:43+0000\n"
-"PO-Revision-Date: 2024-05-15 20:19+0000\n"
+"POT-Creation-Date: 2025-02-03 14:26+0000\n"
+"PO-Revision-Date: 2025-02-03 18:07+0000\n"
 "Last-Translator: wladow <valastiak@mozilla.sk>\n"
 "Language-Team: Mozilla.sk <l10n@mozilla.sk>\n"
 "Language: sk\n"
@@ -16,6 +16,9 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
 "Generated-By: Babel 2.2.0\n"
 "X-Generator: Pontoon\n"
+
+msgid "Mozilla Add-ons: {} [{}]"
+msgstr "Doplnky Mozilly: {} [{}]"
 
 msgid "Email address"
 msgstr "E‑mailová adresa"
@@ -29,26 +32,17 @@ msgstr "Dôvod odvolania"
 msgid "Please explain why you believe that this decision was made in error, and/or does not align with the applicable policy or law."
 msgstr "Vysvetlite, prečo si myslíte, že toto rozhodnutie bolo urobené omylom a/alebo nie je v súlade s platnými zásadami alebo zákonmi."
 
+msgid "User profile"
+msgstr "Používateľský profil"
+
+msgid "\"{}\" for {}"
+msgstr "\"{}\" pre {}"
+
 msgid "Please ensure this field has no more than {max_length} characters."
 msgstr "Uistite sa, že toto pole nemá viac ako {max_length} znakov."
 
 msgid "Invalid value"
 msgstr "Neplatná hodnota"
-
-msgid "\"{}\" for {}"
-msgstr "\"{}\" pre {}"
-
-msgid "User profile"
-msgstr "Používateľský profil"
-
-msgid "Collection"
-msgstr "Kolekcia"
-
-msgid "Rating"
-msgstr "Hodnotenie"
-
-msgid "Mozilla Add-ons: {} [{}]"
-msgstr "Doplnky Mozilly: {} [{}]"
 
 msgid "Appeal reviewer decision"
 msgstr "Odvolanie voči rozhodnutiu kontrolóra"
@@ -72,6 +66,9 @@ msgstr "Už sme preskúmali podobné hlásenie od iného reportéra a naše pred
 msgid "Because the decision you are appealing has already been overturned, your appeal will not be processed."
 msgstr "Keďže rozhodnutie, proti ktorému sa odvolávate, už bolo zrušené, vaše odvolanie nebude spracované."
 
+msgid "The decision you are appealing has already been overridden by a new decision, so this decision can't be appealed."
+msgstr "Rozhodnutie, proti ktorému sa odvolávate, už bolo prepísané novým rozhodnutím, takže proti tomuto rozhodnutiu sa nemožno odvolať."
+
 msgid "This decision can't be appealed."
 msgstr "Proti tomuto rozhodnutiu sa nemožno odvolať."
 
@@ -87,6 +84,7 @@ msgid ""
 "Thank you for your report about %(name)s on Mozilla Add-ons, and for providing more information about your concerns.\n"
 "\n"
 "After reviewing your appeal, we determined that the previous decision, that this content does not violate Mozilla’s policies (%(policy_document_url)s), was correct. Based on that determination, we have denied your appeal, and will not take any action against the account or the content.\n"
+"%(manual_reasoning_text)s.\n"
 "\n"
 "Thank you for your attention.\n"
 msgstr ""
@@ -94,6 +92,7 @@ msgstr ""
 "Ďakujeme za vašu správu o %(name)s v doplnkoch Mozilly a za poskytnutie ďalších informácií o vašich obavách.\n"
 "\n"
 "Po preskúmaní vášho odvolania sme usúdili, že predchádzajúce rozhodnutie, že tento obsah neporušuje pravidlá Mozilly (%(policy_document_url)s), bolo správne. Na základe tohto rozhodnutia sme zamietli vaše odvolanie a nepodnikneme žiadne kroky proti účtu ani obsahu.\n"
+"%(manual_reasoning_text)s.\n"
 "\n"
 "Ďakujeme za vašu pozornosť.\n"
 
@@ -239,11 +238,11 @@ msgstr[2] "Verzie {0}"
 msgid "Review note"
 msgstr "Poznámka ku kontrole"
 
-msgid "Only latest versions of addons can have notes added."
-msgstr "Poznámky môžu byť pridané len k najnovším verziám doplnkov."
-
 msgid "Request content length is too large."
 msgstr "Dĺžka obsahu požiadavky je príliš veľká."
+
+msgid "Add-on uploads are temporarily unavailable."
+msgstr "Nahrávanie doplnkov je dočasne nedostupné."
 
 msgid "Maximum number of categories per application ({MAX_CATEGORIES}) exceeded"
 msgstr "Bol prekročený maximálny počet kategórií na aplikáciu ({MAX_CATEGORIES})."
@@ -295,9 +294,6 @@ msgstr "V zozname"
 
 msgid "Add-on and collection paths need to end with \"/\""
 msgstr "Cesta k doplnkom a kolekciám musí končiť znakom \"/\""
-
-msgid "Previews cannot be created for themes."
-msgstr "Nie je možné vytvoriť ukážky pre témy."
 
 msgid "Built in licenses can not be updated."
 msgstr "Vstavané licencie nie je možné aktualizovať."
@@ -383,6 +379,9 @@ msgstr "Zdroj sa nedá zmeniť, pretože túto verziu skontrolovala Mozilla."
 msgid "This type of add-on does not allow custom compatibility."
 msgstr "Tento typ doplnku neumožňuje vlastnú kompatibilitu."
 
+msgid "This endpoint is not valid for Themes."
+msgstr "Tento koncový bod nie je platný pre témy vzhľadu."
+
 msgid "My Add-ons"
 msgstr "Moje doplnky"
 
@@ -442,6 +441,9 @@ msgstr "CIDR"
 
 msgid "Some features are temporarily disabled while we perform website maintenance. We'll be back to full capacity shortly."
 msgstr "Niektoré funkcie sú dočasne vypnuté kvôli údržbe stránok. Stránka bude plne dostupná onedlho."
+
+msgid "URLs are not allowed."
+msgstr "Webové adresy nie sú povolené."
 
 msgid "Must contain at least one printable character."
 msgstr "Musí obsahovať aspoň jeden znak, ktorý sa dá vytlačiť."
@@ -538,6 +540,12 @@ msgstr "Táto funkcia je počas údržby stránok vypnutá. Prosím, použite v 
 msgid "Some features on this page are temporarily disabled while we perform website maintenance. Please try again a little later."
 msgstr "Niektoré funkcie sú na tejto stránke dočasne vypnuté kvôli údržbe. Prosím, skúste to znova neskôr."
 
+msgid "Add-on uploads temporarily disabled"
+msgstr "Nahrávanie doplnkov je dočasne zakázané"
+
+msgid "Add-on uploads have been temporarily disabled. Please check back later."
+msgstr "Nahrávanie doplnkov bolo dočasne zakázané. Skúste to neskôr."
+
 # {0} is the application the user is browsing.  Examples:  Thunderbird,
 # Firefox,
 # Sunbird
@@ -630,6 +638,12 @@ msgstr "Túto vlastnú URL adresu nie je možné použiť."
 msgid "This add-on already belongs to the collection"
 msgstr "Tento doplnok už v kolekcii je"
 
+msgid "Blocked"
+msgstr "Zablokované"
+
+msgid "Restricted"
+msgstr "Obmedzené"
+
 msgid "{addon} was created."
 msgstr "Doplnok {addon} bol vytvorený."
 
@@ -703,12 +717,6 @@ msgstr "Doplnok {addon} {version} pozdržaný."
 msgid "Retained"
 msgstr "Pozdržaný"
 
-msgid "{addon} {version} escalated."
-msgstr "Pre doplnok {addon} {version} eskalovaná recenzia."
-
-msgid "Super review requested"
-msgstr "Vyžiadaná super-kontrola"
-
 msgid "{addon} {version} review requested."
 msgstr "Pre doplnok {addon} {version} bola vyžiadaná kontrola."
 
@@ -721,14 +729,8 @@ msgstr "Požadované ďalšie informácie týkajúce sa doplnku {addon} {version
 msgid "More information requested"
 msgstr "Požadované dodatočné informácie"
 
-msgid "{addon} {version} super review requested."
-msgstr "Pre doplnok {addon} {version} bola vyžiadaná super-kontrola."
-
 msgid "The add-on has been flagged for Admin Review. It's still in our review queue, but it will need to be checked by one of our admin reviewers. The review might take longer than usual."
 msgstr "Doplnok bol označený na kontrolu správcom. Stále je v rade na kontrolu, ale bude to musieť skontrolovať jeden z našich správcovských recenzentov. Kontrola môže trvať dlhšie ako zvyčajne."
-
-msgid "Commented"
-msgstr "S komentárom"
 
 msgid "{tag} added to {addon}."
 msgstr "Doplnku {addon} pridaná značka {tag}."
@@ -744,20 +746,6 @@ msgstr "Doplnok {addon} odstránený z kolekcie {collection}."
 
 msgid "{rating} for {addon} written."
 msgstr "Pre doplnok {addon} bolo napísané hodnotenie {rating}."
-
-#. L10n: {0} is a category name.
-msgid "{addon} featured in {0}."
-msgstr "Doplnok {addon} pridaný medzi odporúčané v kategórii {0}."
-
-#. L10n: {0} is a category name.
-msgid "{addon} no longer featured in {0}."
-msgstr "Doplnok {addon} už nie je medzi odporúčanými v kategórii {0}."
-
-msgid "{addon} is now featured."
-msgstr "Doplnok {addon} je teraz odporúčaný."
-
-msgid "{addon} is no longer featured."
-msgstr "Doplnok {addon} už viac nie je odporúčaný."
 
 #. L10n: {0} is the application, {1} is the version of the app
 msgid "{0} {1} added."
@@ -806,45 +794,21 @@ msgstr "Účet bol aktualizovaný."
 msgid "Account {user} deleted."
 msgstr "Účet {user} bol odstránený."
 
-msgid "Created: {0}."
-msgstr "Vytvorené: {0}."
-
-msgid "Edited field: {2} set to: {0}."
-msgstr "Upravené pole: {2} nastavené na: {0}."
-
-msgid "Deleted: {1}."
-msgstr "Odstránené: {1}."
-
 msgid "{rating} for {addon} updated."
 msgstr "Hodnotenie {rating} pre {addon} bolo aktualizované."
 
 msgid "{addon} reviewed."
 msgstr "Doplnok {addon} skontrolovaný."
 
-msgid "User {user} banned."
-msgstr "Používateľ {user} bol zablokovaný."
-
-msgid "User {user} picture deleted."
-msgstr "Obrázok používateľa {user} bol odstránený."
-
-msgid "User {user} added to {group}."
-msgstr "Používateľ {user} bol pridaný do skupiny {group}."
-
-msgid "User {user} removed from {group}."
-msgstr "Používateľ {user} bol odstránený zo skupiny {group}."
-
 msgid "{addon} unlisted."
 msgstr "{addon} je mimo zoznamu."
-
-msgid "{file} was signed."
-msgstr "{file} bol podpísaný."
 
 #. L10n: {0} is the add-on GUID.
 msgid "Add-on id {0} with GUID {1} has been deleted"
 msgstr "Doplnok id {0} s GUID {1} bol odstránený"
 
-msgid "{addon} migrated from preliminary."
-msgstr "Doplnok {addon} migroval z predbežnej verzie."
+msgid "{file} was signed."
+msgstr "{file} bol podpísaný."
 
 msgid "Reply by developer on {addon} {version}."
 msgstr "Odpoveď od vývojára doplnku {addon} {version}."
@@ -870,23 +834,11 @@ msgstr "Zdrojový kód doplnku {addon} {version} bol nahraný."
 msgid "Source code uploaded"
 msgstr "Zdrojový kód bol nahratý"
 
-msgid "{addon} {version} auto-approval confirmed."
-msgstr "Automatické schválenie doplnku {addon} {version} bolo potvrdené."
-
-msgid "Auto-Approval confirmed"
-msgstr "Automatické schválenie potvrdené"
-
 msgid "{addon} {version} re-enabled."
 msgstr "Doplnok {addon} {version} bol znova povolený."
 
 msgid "{addon} {version} disabled."
 msgstr "Doplnok {addon} {version} bol zakázaný."
-
-msgid "{addon} {version} content approved."
-msgstr "Obsah doplnku {addon}{version} bol schválený."
-
-msgid "Content approved"
-msgstr "Obsah bol schválený"
 
 msgid "{addon} {version} content rejected."
 msgstr "Obsah doplnku {addon} {version} bol zamietnutý."
@@ -894,30 +846,6 @@ msgstr "Obsah doplnku {addon} {version} bol zamietnutý."
 # 87%
 msgid "Content rejected"
 msgstr "Obsah bol zamietnutý"
-
-msgid "{addon} information request altered or removed by admin."
-msgstr "Žiadosť o informácie k doplnku {addon} bola zmenená alebo odstránená správcom."
-
-msgid "Information request altered"
-msgstr "Žiadosť o informácie zmenená"
-
-msgid "Information request cleared by developer on {addon} {version}."
-msgstr "Žiadosť o informácie k doplnku {addon} {version} bola vymazaná vývojárom."
-
-msgid "Information request removed"
-msgstr "Žiadosť o informácie bola odstránená"
-
-msgid "{addon} {version} admin add-on-review requested."
-msgstr "Vyžiadaná kontrola správcom pre doplnok {addon} {version}."
-
-msgid "Admin add-on-review requested"
-msgstr "Vyžiadaná kontrola doplnku správcom"
-
-msgid "{addon} {version} admin content-review requested."
-msgstr "Pre doplnok {addon} {version} bola vyžiadaná kontrola jeho obsahu."
-
-msgid "Admin content-review requested"
-msgstr "Vyžiadaná kontrola obsahu doplnku"
 
 msgid "{addon} {version} admin theme-review requested."
 msgstr "Pre {addon} {version} bola vyžiadaná kontrola témy vzhľadu správcom."
@@ -927,42 +855,6 @@ msgstr "Vyžaduje sa kontrola témy vzhľadu správcom"
 
 msgid "{addon} was migrated from a lightweight theme."
 msgstr "Doplnok {addon} bol migrovaný z farebnej témy."
-
-msgid "User {user} api key reset."
-msgstr "Používateľ {user} resetoval kľúč API."
-
-msgid "Block for {0} added to Blocklist."
-msgstr "Blokovanie pre {0} bolo pridané do zoznamu blokovaných."
-
-msgid "Block added"
-msgstr "Blokovanie bolo pridané"
-
-msgid "Block for {0} edited in Blocklist."
-msgstr "Blokovanie pre {0} bolo upravené v zozname blokovaných."
-
-msgid "Block edited"
-msgstr "Blokovanie bolo upravené"
-
-msgid "Block for {0} deleted from Blocklist."
-msgstr "Blokovanie pre {0} bolo odstránené zo zoznamu blokovaných."
-
-msgid "Block deleted"
-msgstr "Blokovanie bolo odstránené"
-
-msgid "GUID for {addon} added to DeniedGuid."
-msgstr "Identifikátor GUID pre doplnok {addon} bol pridaný do zoznamu DeniedGuid."
-
-msgid "GUID for {addon} removed from DeniedGuid."
-msgstr "Identifikátor GUID pre doplnok {addon} bol odstránený zo zoznamu DeniedGuid."
-
-msgid "Block {1} action for {0} signed off."
-msgstr "Akcia blokovania {1} pre {0} odsúhlasená."
-
-msgid "Block action signoff"
-msgstr "Odsúhlasenie akcie blokovania"
-
-msgid "User {user} session(s) reset."
-msgstr "Relácie používateľa {user} boli resetované."
 
 msgid "{addon} {version} content reject scheduled."
 msgstr "Pre doplnok {addon} {version} bolo naplánované odmietnutie obsahu."
@@ -1004,24 +896,6 @@ msgstr "Čakajúce odmietnutie pre {addon} {version} bolo vymazané."
 msgid "Pending rejection cleared"
 msgstr "Čakajúce odmietnutie bolo vymazané"
 
-msgid "{version} added to Blocklist."
-msgstr "Verzia {version} pridaná do zoznamu blokovaných."
-
-msgid "Version Blocked"
-msgstr "Verzia zablokovaná"
-
-msgid "{version} removed from Blocklist."
-msgstr "Verzia {version} bola odstránená zo zoznamu blokovaných."
-
-msgid "Version Unblocked"
-msgstr "Verzia odblokovaná"
-
-msgid "{addon} {version} admin add-on-review cleared."
-msgstr "Žiadosť o kontrolu správcom pre doplnok {addon} {version} zrušená."
-
-msgid "Admin add-on-review cleared"
-msgstr "Žiadosť o kontrolu doplnku správcom zrušená"
-
 msgid "{user_responsible} changed {addon} slug from {0} to {1}."
 msgstr "Používateľ {user_responsible} zmenil slug (časť URL adresy) doplnku {addon} z {0} na {1}."
 
@@ -1037,11 +911,23 @@ msgstr "Moderátor zrušil odstránenie kolekcie {collection}"
 msgid "Review {rating} for {addon} un-deleted."
 msgstr "Zmazanie hodnotenia {rating} pre doplnok {addon} bolo zrušené."
 
-msgid "User {user} content restored."
-msgstr "Obsah používateľa {user} bol obnovený."
+msgid "{addon} {version} rejected automatically after delay expired."
+msgstr "Doplnok {addon} {version} bol automatický zamietnutý po vypršaní doby odloženia."
 
-msgid "User {user} unbanned."
-msgstr "Používateľ {user} bol odblokovaný."
+msgid "Rejected automatically after delay expired"
+msgstr "Doplnok bol automatický zamietnutý po vypršaní doby odloženia"
+
+msgid "{addon} {version} content rejected automatically after delay expired."
+msgstr "Obsah doplnku {addon} {version} bol automatický zamietnutý po vypršaní doby odloženia."
+
+msgid "Content rejected automatically after delay expired"
+msgstr "Obsah bol automatický zamietnutý po vypršaní doby odloženia"
+
+msgid "{addon} {version} pending rejection changed."
+msgstr "Čakajúce odmietnutie pre {addon} {version} bolo zmenené."
+
+msgid "Pending rejection changed"
+msgstr "Čakajúce odmietnutie bolo zmenené"
 
 msgid "Firefox"
 msgstr "Firefox"
@@ -1159,16 +1045,6 @@ msgstr "Témy"
 
 msgid "Deprecated Site Permissions"
 msgstr "Zastarané Oprávnenia stránok"
-
-msgid "Accessibility"
-msgstr "Zjednodušenie ovládania"
-
-msgid ""
-"Download Firefox accessibility extensions to help you consume content and navigate online in ways that work best for you. Discover extensions that remove or reduce barriers to access by changing "
-"screen brightness, reading web pages aloud, providing precision magnification, and more."
-msgstr ""
-"Stiahnite si rozšírenia na zjednodušenie ovládania Firefoxu, ktoré vám pomôžu využívať obsah a navigovať online spôsobmi, ktoré vám najviac vyhovujú. Objavte rozšírenia, ktoré odstraňujú alebo "
-"zmenšujú prekážky prístupu zmenou jasu obrazovky, hlasným čítaním webových stránok, poskytovaním presného zväčšenia a podobne."
 
 msgid "Alerts & Updates"
 msgstr "Upozornenia a aktualizácie"
@@ -1353,23 +1229,32 @@ msgstr "Všeobecné"
 msgid "Mozilla Public License 2.0"
 msgstr "Mozilla Public License 2.0"
 
-msgid "GNU General Public License v2.0"
-msgstr "GNU General Public License v2.0"
+msgid "Apache License 2.0"
+msgstr "Apache License 2.0"
 
-msgid "GNU General Public License v3.0"
-msgstr "GNU General Public License v3.0"
+msgid "GNU General Public License v2.0 only"
+msgstr "Len GNU General Public License v2.0"
 
-msgid "GNU Library General Public License v2.1"
-msgstr "GNU Library General Public License v2.1"
+msgid "GNU General Public License v3.0 only"
+msgstr "Len GNU General Public License v3.0"
 
-msgid "GNU Library General Public License v3.0"
-msgstr "GNU Library General Public License v3.0"
+msgid "GNU Lesser General Public License v2.1 only"
+msgstr "Len GNU Lesser General Public License v2.1"
 
-msgid "The MIT License"
+msgid "GNU Lesser General Public License v3.0 only"
+msgstr "Len GNU Lesser General Public License v3.0"
+
+msgid "GNU Affero General Public License v3.0 only"
+msgstr "Len GNU Affero General Public License v3.0"
+
+msgid "MIT License"
 msgstr "Licencia MIT"
 
-msgid "The BSD License"
-msgstr "Licencia BSD"
+msgid "ISC License"
+msgstr "Licencia ISC"
+
+msgid "BSD 2-Clause \"Simplified\" License"
+msgstr "Licencia BSD 2-Clause \"Simplified\""
 
 msgid "Mozilla Public License 1.1"
 msgstr "Mozilla Public License 1.1"
@@ -1395,17 +1280,32 @@ msgstr "Creative Commons Attribution-NoDerivs 3.0"
 msgid "Creative Commons Attribution-ShareAlike 3.0"
 msgstr "Creative Commons Attribution-ShareAlike 3.0"
 
+msgid "Creative Commons Attribution 4.0"
+msgstr "Creative Commons Attribution 4.0"
+
+msgid "Creative Commons Attribution-NonCommercial 4.0"
+msgstr "Creative Commons Attribution-NonCommercial 4.0"
+
+msgid "Creative Commons Attribution-NonCommercial-NoDerivs 4.0"
+msgstr "Creative Commons Attribution-NonCommercial-NoDerivs 4.0"
+
+msgid "Creative Commons Attribution-NonCommercial-Share Alike 4.0"
+msgstr "Creative Commons Attribution-NonCommercial-Share Alike 4.0"
+
+msgid "Creative Commons Attribution-NoDerivs 4.0"
+msgstr "Creative Commons Attribution-NoDerivs 4.0"
+
+msgid "Creative Commons Attribution-ShareAlike 4.0"
+msgstr "Creative Commons Attribution-ShareAlike 4.0"
+
+msgid "The Unlicense"
+msgstr "Unlicense"
+
 msgid "Not Promoted"
 msgstr "Nepropagované"
 
 msgid "Recommended"
 msgstr "Odporúčané"
-
-msgid "Sponsored"
-msgstr "Sponzorované"
-
-msgid "Verified"
-msgstr "Overené"
 
 msgid "By Firefox"
 msgstr "Od Firefoxu"
@@ -1658,6 +1558,43 @@ msgstr ""
 msgid "Display Name"
 msgstr "Zobrazovaný názov"
 
+msgid "Confirm email address"
+msgstr "Potvrďte e‑mailovú adresu"
+
+msgid "Generate new credentials"
+msgstr "Generovať nové prihlasovacie údaje"
+
+msgid "Revoke and regenerate credentials"
+msgstr "Odvolať a obnoviť prihlasovacie údaje"
+
+msgid "Revoke"
+msgstr "Odvolať"
+
+msgid "JWT issuer"
+msgstr "Vydavateľ JWT"
+
+msgid ""
+"To make API requests, send a <a href=\"{jwt_url}\">JSON Web Token (JWT)</a> as the authorization header. You'll need to generate a JWT for every request as explained in the <a "
+"href=\"{docs_url}\">API documentation</a>."
+msgstr ""
+"Ak chcete zadať požiadavky cez rozhranie API, odošlite ako autorizačnú hlavičku <a href=\"{jwt_url}\">JSON Web Token (JWT)</a>. Pre každú požiadavku budete musieť vygenerovať JWT, ako je vysvetlené "
+"v <a href=\"{docs_url}\">dokumentácii API</a>."
+
+msgid "JWT secret"
+msgstr "Kľúč JWT"
+
+msgid "Please click the confirm button below to generate API credentials for user <strong>{name}</strong>."
+msgstr "Kliknutím na tlačidlo potvrdenia nižšie vygenerujete prihlasovacie údaje k API pre používateľa <strong>{name}</strong>."
+
+msgid "A confirmation link will be sent to your email address. After confirmation you will find your API keys on this page."
+msgstr "Na vašu e‑mailovú adresu bude odoslaný potvrdzovací odkaz. Po potvrdení nájdete svoje API kľúče na tejto stránke."
+
+msgid "You don't have any API credentials."
+msgstr "Nemáte žiadne prihlasovacie údaje k API."
+
+msgid "Something went wrong, please contact developer support."
+msgstr "Niečo sa pokazilo, kontaktujte podporu pre vývojárov."
+
 msgid "Invalid or corrupt add-on file."
 msgstr "Neplatný alebo poškodený súbor doplnku."
 
@@ -1688,6 +1625,9 @@ msgstr "Dátum vytvorenia"
 
 msgid "Downloads"
 msgstr "Počet stiahnutí"
+
+msgid "Rating"
+msgstr "Hodnotenie"
 
 msgid "All My Add-ons"
 msgstr "Všetky moje doplnky"
@@ -1824,6 +1764,9 @@ msgstr "Zvýraznenie karty"
 msgid "The highlight color of the active tab. Implemented as a border around the tab on Firefox 89+ and a line above the tab on older Firefoxes. Manifest field:  tab_line."
 msgstr "Farba zvýraznenia aktívnej karty. Implementované ako okraj okolo karty vo Firefoxe 89+ a čiara nad kartou v starších prehliadačoch Firefox. Pole v manifest:  tab_line."
 
+msgid "Add-on uploads are temporarily unavailable"
+msgstr "Nahrávanie doplnkov je dočasne nedostupné"
+
 msgid "Review requested."
 msgstr "Vyžaduje sa kontrola."
 
@@ -1832,6 +1775,9 @@ msgstr "Pre pokračovanie musíte poskytnúť ďalšie detaily."
 
 msgid "Your old credentials were revoked and are no longer valid."
 msgstr "Vaše staré prihlasovacie údaje boli odvolané a už nie sú platné."
+
+msgid "Keep your API keys secret and never share them with anyone, including Mozilla contributors."
+msgstr "Udržujte svoje kľúče API v tajnosti a nikdy ich s nikým nezdieľajte, vrátane prispievateľov Mozilly."
 
 msgid "New API key created"
 msgstr "Nový kľúč API bol vytvorený"
@@ -2699,6 +2645,10 @@ msgid "Source files (aside from open-source third party libraries) cannot be tra
 msgstr "Zdrojové súbory (okrem open source knižníc tretích strán) nemožno prekladať, spájať, minifikovať ani inak strojovo generovať."
 
 #, python-format
+msgid "The maximum file size accepted is %(max_size)s."
+msgstr "Maximálna akceptovaná veľkosť súboru je %(max_size)s."
+
+#, python-format
 msgid "For more information, please read <a %(a_attrs)s>Source Code Submission</a> on Firefox Extension Workshop."
 msgstr "Ďalšie informácie o <a %(a_attrs)s>Odoslaní zdrojového kódu</a> získate na stránkach Workshop tvorby rozšírení pre Firefox."
 
@@ -2722,6 +2672,10 @@ msgstr "Nahrať verziu"
 
 msgid "Use the fields below to upload your add-on package. After upload, a series of automated validation tests will be run on your file."
 msgstr "Pomocou polí nižšie nahrajte svoj balík s doplnkom. Po nahraní sa na vašom súbore spustí séria automatických overovacích testov."
+
+#, python-format
+msgid "The maximum file size accepted is %(max_size)s. If your add-on is larger than %(max_size)s, it will fail validation."
+msgstr "Maximálna akceptovaná veľkosť súboru je %(max_size)s. Ak je váš doplnok väčší ako %(max_size)s, jeho overenie zlyhá."
 
 msgid "Which applications is this version compatible with?"
 msgstr "S ktorými aplikáciami je táto verzia kompatibilná?"
@@ -2785,49 +2739,6 @@ msgstr "Naspäť"
 
 msgid "API Credentials"
 msgstr "Prihlasovacie údaje k API"
-
-#, python-format
-msgid "For detailed instructions, consult the <a href=\"%(docs_url)s\">API documentation</a>."
-msgstr "Podrobné pokyny nájdete v <a href=\"%(docs_url)s\">dokumentácii rozhrania API</a>."
-
-msgid "Keep your API keys secret and <strong>never share them with anyone</strong>, including Mozilla contributors."
-msgstr "Udržujte svoje kľúče API v tajnosti a <strong>nikdy ich s nikým nezdieľajte</strong>, vrátane prispievateľov Mozilly."
-
-msgid "JWT issuer"
-msgstr "Vydavateľ JWT"
-
-msgid "JWT secret"
-msgstr "Kľúč JWT"
-
-#, python-format
-msgid ""
-"To make API requests, send a <a href=\"%(jwt_url)s\">JSON Web Token (JWT)</a> as the authorization header. You'll need to generate a JWT for every request as explained in the <a "
-"href=\"%(docs_url)s\">API documentation</a>."
-msgstr ""
-"Ak chcete zadať požiadavky cez rozhranie API, odošlite ako autorizačnú hlavičku <a href=\"%(jwt_url)s\">JSON Web Token (JWT)</a>. Pre každú požiadavku budete musieť vygenerovať JWT, ako je "
-"vysvetlené v <a href=\"%(docs_url)s\">dokumentácii API</a>."
-
-#, python-format
-msgid "Please click the confirm button below to generate API credentials for user <strong>%(name)s</strong>."
-msgstr "Kliknutím na tlačidlo potvrdenia nižšie vygenerujete prihlasovacie údaje k API pre používateľa <strong>%(name)s</strong>."
-
-msgid "A confirmation link will be sent to your email address. After confirmation you will find your API keys on this page."
-msgstr "Na vašu e‑mailovú adresu bude odoslaný potvrdzovací odkaz. Po potvrdení nájdete svoje API kľúče na tejto stránke."
-
-msgid "You don't have any API credentials."
-msgstr "Nemáte žiadne prihlasovacie údaje k API."
-
-msgid "Revoke"
-msgstr "Odvolať"
-
-msgid "Revoke and regenerate credentials"
-msgstr "Odvolať a obnoviť prihlasovacie údaje"
-
-msgid "Confirm and generate new credentials"
-msgstr "Potvrdiť a vygenerovať nové prihlasovacie údaje"
-
-msgid "Generate new credentials"
-msgstr "Generovať nové prihlasovacie údaje"
 
 #, python-format
 msgid ""
@@ -3086,13 +2997,13 @@ msgstr "Vyberte si licenciu vhodnú pre práva, ktoré udeľujete na váš zdroj
 msgid "Sort by:"
 msgstr "Zoradiť podľa:"
 
-#. %s is a list of HTML tags.
+#. %s is a list of markdown syntax.
 #, python-format
-msgid "Allowed HTML: %(allowed_html)s"
-msgstr "Povolené značky HTML: %(allowed_html)s"
+msgid "Allowed Markdown: %(allowed_markdown)s"
+msgstr "Podporovaný kód Markdownu: %(allowed_markdown)s"
 
-msgid "Some HTML supported."
-msgstr "Podporované sú niektoré značky HTML."
+msgid "Some Markdown supported."
+msgstr "Markdown je čiastočne podporovaný."
 
 msgid "Remove this application"
 msgstr "Odstrániť túto aplikáciu"
@@ -3199,15 +3110,6 @@ msgstr "Program Odporúčané rozšírenia"
 msgid "Contribute"
 msgstr "Prispieť"
 
-msgid "Review Add-ons"
-msgstr "Kontrolujte doplnky"
-
-msgid "Volunteer reviewers help keep add-ons safe and reliable to use. They enjoy great perks too!"
-msgstr "Dobrovoľní kontrolóri pomáhajú udržiavať doplnky bezpečné a spoľahlivé. Majú tiež skvelé výhody!"
-
-msgid "Join us!"
-msgstr "Pripojte sa k nám"
-
 msgid "Write Some Code"
 msgstr "Napíšte nejaký kód"
 
@@ -3296,8 +3198,8 @@ msgstr "Zaregistrujte si účet vývojára alebo sa prihláste do Centra pre vý
 msgid "Manage Version {0}"
 msgstr "Spravovať verziu {0}"
 
-#. {0} is an add-on name.
 # {0} is the name of the collection
+#. {0} is an add-on name.
 msgid "Manage {0}"
 msgstr "Spravovať {0}"
 
@@ -3475,16 +3377,16 @@ msgstr "Zrušenie vašej žiadosti o kontrolu označí váš doplnok za neúpln�
 msgid "Are you sure you wish to cancel your review request?"
 msgstr "Naozaj chcete zrušiť vašu žiadosť o kontrolu?"
 
-#. L10n: first parameter is the number of errors
 # {0} is a number
+#. L10n: first parameter is the number of errors
 msgid "{0} error"
 msgid_plural "{0} errors"
 msgstr[0] "{0} chyba"
 msgstr[1] "{0} chyby"
 msgstr[2] "{0} chýb"
 
-#. L10n: first parameter is the number of warnings
 # {0} is a number
+#. L10n: first parameter is the number of warnings
 msgid "{0} warning"
 msgid_plural "{0} warnings"
 msgstr[0] "{0} upozornenie"
@@ -3843,7 +3745,7 @@ msgstr "Urobte z toho svoj YouTube. Prehrávajte videá vo vyskakovacom okne, zo
 
 #. editorial content for the discovery pane.
 msgid "Get in-depth engagement and traffic information for any website."
-msgstr "Získajte podrobné informácie o interakcii a návštevnosti akejkoľvek webovej lokality."
+msgstr "Získajte podrobné informácie o interakciách a návštevnosti akejkoľvek webovej lokality."
 
 #. editorial content for the discovery pane.
 msgid "Applies a fresh, modern appearance to Wikipedia."
@@ -4320,10 +4222,6 @@ msgid "Double-click any word to instantly see its definition."
 msgstr "Dvakrát kliknite na ľubovoľné slovo, aby ste okamžite videli jeho definíciu."
 
 #. editorial content for the discovery pane.
-msgid "Blues & Yellows"
-msgstr "Modré a žlté"
-
-#. editorial content for the discovery pane.
 #. editorial content for the primary hero shelves.
 msgid "Save batches of tabs as convenient bookmarks."
 msgstr "Uložte niekoľko kariet naraz do pohodlných záložiek."
@@ -4384,6 +4282,10 @@ msgstr "Počúvajte hudbu na YouTube bez otravného prerušovania „Video pozas
 #. editorial content for the discovery pane.
 msgid "Change the way the web looks."
 msgstr "Zmeňte si vzhľad webu."
+
+#. editorial content for the discovery pane.
+msgid "Customize YouTube to taste. Give it a new look, new features & filter only the content you want."
+msgstr "Prispôsobte si YouTube podľa chuti. Dajte mu nový vzhľad, nové funkcie a filtrujte iba obsah, ktorý chcete."
 
 #. editorial content for the primary hero shelves.
 msgid "Some websites have difficulty playing videos on Android. Here's a fix."
@@ -4537,6 +4439,10 @@ msgstr "Prekladajte webové stránky vo Firefoxe — súkromne — bez použitia
 msgid "Block time-wasting websites. Block them completely or just during time frames of your choosing."
 msgstr "Blokujte webové stránky, ktoré vás oberajú o čas. Zablokujte ich úplne alebo len v časových rámcoch podľa vášho výberu."
 
+#. editorial content for the primary hero shelves.
+msgid "Easily summarize emails, docs, articles, and video transcripts in English across the web — without sacrificing your privacy."
+msgstr "Jednoducho zosumarizujte e‑maily, dokumenty, články a prepisy videí v angličtine na webe – bez toho, aby ste obetovali svoje súkromie."
+
 #. editorial content for the secondary hero shelves.
 msgid "Extensions are like apps for Firefox."
 msgstr "Rozšírenia sú ako aplikácie pre Firefox."
@@ -4550,16 +4456,17 @@ msgid "See all extensions"
 msgstr "Zobraziť všetky rozšírenia"
 
 #. editorial content for the secondary hero shelves.
-msgid "Port Authority (Developer Spotlight)"
-msgstr "Port Authority (blog Developer Spotlight)"
-
-#. editorial content for the secondary hero shelves.
 msgid "Privacy & Security extensions"
 msgstr "Rozšírenia zamerané na bezpečnosť a súkromie"
 
 #. editorial content for the secondary hero shelves.
-msgid "Fantastic tab managers"
-msgstr "Fantastickí správcovia kariet"
+#. editorial content for the homepage shelves.
+msgid "Tab managers"
+msgstr "Správcovia kariet"
+
+#. editorial content for the secondary hero shelves.
+msgid "Spotlight: Adaptive Tab Bar Color"
+msgstr "Spotlight: Adaptive Tab Bar Color"
 
 #. editorial content for the secondary hero shelves.
 msgid "See staff picks"
@@ -4589,8 +4496,8 @@ msgstr "Rozšírenia zamerané na zvýšenie súkromia"
 msgid "See more recommended privacy extensions"
 msgstr "Ďalšie odporúčané rozšírenia pre ochranu súkromia"
 
-#. editorial content for the homepage shelves.
 # Plural in this context means many of the add-on type
+#. editorial content for the homepage shelves.
 msgid "Popular extensions"
 msgstr "Populárne rozšírenia"
 
@@ -4629,10 +4536,6 @@ msgstr "Streamovanie na sociálnych sieťach"
 #. editorial content for the homepage shelves.
 msgid "See more social streaming staff picks"
 msgstr "Ďalšie tipy od znalcov pre streamovanie na sociálnych sieťach"
-
-#. editorial content for the homepage shelves.
-msgid "Tab managers"
-msgstr "Správcovia kariet"
 
 #. editorial content for the homepage shelves.
 msgid "See more tab management staff picks"
@@ -4718,6 +4621,22 @@ msgstr "Najlepší správcovia sťahovania"
 msgid "See more download manager staff picks"
 msgstr "Ďalšie tipy od znalcov pre správcov sťahovania"
 
+#. editorial content for the homepage shelves.
+msgid "Accessibility extensions"
+msgstr "Rozšírenia pre zjednodušenie ovládania"
+
+#. editorial content for the homepage shelves.
+msgid "See more accessibility staff picks"
+msgstr "Ďalšie tipy od znalcov na rozšírenia pre zjednodušenie ovládania"
+
+#. editorial content for the homepage shelves.
+msgid "Extension starter pack"
+msgstr "Štartovací balíček rozšírení"
+
+#. editorial content for the homepage shelves.
+msgid "See more starter extension staff picks"
+msgstr "Ďalšie tipy od znalcov na štartovacie rozšírenia"
+
 msgid "Unreviewed"
 msgstr "Neskontrolované"
 
@@ -4731,11 +4650,8 @@ msgstr "Toto nahranie už bolo odoslané."
 msgid "Could not parse the manifest file."
 msgstr "Súbor manifestu sa nepodarilo spracovať."
 
-msgid "Add-on ID is required for Firefox 47 and below."
-msgstr "Pre Firefox 47 a starší je vyžadované ID doplnku."
-
-msgid "Lowest supported \"strict_min_version\" is 42.0."
-msgstr "Najnižšia možná hodnota \"strict_min_version\" je 42.0."
+msgid "Lowest supported \"strict_min_version\" is {min_version}."
+msgstr "Najnižšia možná hodnota \"strict_min_version\" je {min_version}."
 
 msgid "Unknown \"strict_min_version\" {appver} for {app}"
 msgstr "Neznáma hodnota \"strict_min_version\" {appver} pre {app}"
@@ -4896,6 +4812,12 @@ msgstr "Ohodnotené {0} z 5 hviezdičiek"
 #, python-format
 msgid "Rated %(rating)s out of 5 stars"
 msgstr "Ohodnotené %(rating)s z 5 hviezdičiek"
+
+msgid "Unsupported file type, please upload a file {extensions}."
+msgstr "Nepodporovaný typ súboru, nahrajte súbor {extensions}."
+
+msgid "File too large."
+msgstr "Súbor je príliš veľký."
 
 #, python-format
 msgid "<dd>%(review_author)s</dd>"

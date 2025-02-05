@@ -9,12 +9,12 @@ from olympia.users.urls import USER_ID
 def queue_urls():
     return [
         re_path(
-            views.reviewer_tables_registry[queue].url,
-            getattr(views, views.reviewer_tables_registry[queue].view_name),
-            kwargs={'tab': queue},
-            name='reviewers.' + views.reviewer_tables_registry[queue].urlname,
+            queue.url_suffix,
+            getattr(views, queue.view_name),
+            kwargs={'tab': tab},
+            name=f'reviewers.{queue.name}',
         )
-        for queue in views.reviewer_tables_registry
+        for tab, queue in views.reviewer_tables_registry.items()
     ]
 
 
@@ -25,6 +25,14 @@ urlpatterns = (
         r'^dashboard$', lambda request: redirect('reviewers.dashboard', permanent=True)
     ),
     re_path(r'^queue/', include(queue_urls())),
+    re_path(
+        r'^queue/theme_new$',
+        lambda request: redirect('reviewers.queue_theme', permanent=True),
+    ),
+    re_path(
+        r'^queue/theme_updates$',
+        lambda request: redirect('reviewers.queue_theme', permanent=True),
+    ),
     re_path(
         r'^moderationlog$',
         views.ratings_moderation_log,
@@ -65,6 +73,11 @@ urlpatterns = (
         views.whiteboard,
         name='reviewers.whiteboard',
     ),
+    re_path(
+        r'^decision-review/(?P<decision_id>[^/<>]+)$',
+        views.decision_review,
+        name='reviewers.decision_review',
+    ),
     re_path(r'^eula/%s$' % ADDON_ID, views.eula, name='reviewers.eula'),
     re_path(r'^privacy/%s$' % ADDON_ID, views.privacy, name='reviewers.privacy'),
     re_path(r'^motd$', views.motd, name='reviewers.motd'),
@@ -78,11 +91,6 @@ urlpatterns = (
         r'^theme_background_images/(?P<version_id>[^ /]+)?$',
         views.theme_background_images,
         name='reviewers.theme_background_images',
-    ),
-    re_path(
-        r'^download-git-file/(?P<version_id>\d+)/(?P<filename>.*)/',
-        views.download_git_stored_file,
-        name='reviewers.download_git_file',
     ),
     re_path(
         r'^developer_profile/%s$' % USER_ID,

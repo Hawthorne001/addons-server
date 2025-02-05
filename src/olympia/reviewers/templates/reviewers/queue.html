@@ -8,7 +8,7 @@
   {% endif %}
 {% endblock %}
 
-{% block bodyclass %}{{ super() }} {{ " content-review" if tab == "content_review" else "" }}{% endblock %}
+{% block bodyclass %}{{ super() }} {{ " content-review" if tab == "queue_content_review" else "" }}{% endblock %}
 
 {% block content %}
 
@@ -24,7 +24,7 @@
     {{ page|paginator }}
     </div>
 
-    {% if tab == 'moderated' %}
+    {% if tab == 'queue_moderated' %}
       <div id="reviews-flagged">
         <form method="post" class="item">
           <div class="review-saved">
@@ -77,7 +77,38 @@
           {% endif %}
         </form>
       </div>
+      {% elif tab == 'queue_decisions' %}
+      <table id="held-decision-queue" class="data-grid">
+        <thead>
+          <tr class="listing-header">
+              <th>Type</th>
+              <th>Target</th>
+              <th>Action</th>
+              <th>Decision Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for decision in page.object_list %}
+          <tr id="{{ decision.get_reference_id(short=True) }}" class="held-item">
+            <td><div class="app-icon ed-sprite-action-target-{{ decision.get_target_display() }}" title="{{ decision.get_target_display() }}"></div></td>
+            <td>{{ decision.get_target_name() }}</td>
+            <td><a href="{{ decision.get_target_review_url() }}">{{ decision.get_action_display() }}</a></td>
+            <td>{{ decision.created|datetime }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if page.paginator.count == 0 %}
+        <div class="no-results">There are currently no held actions.</div>
+      {% endif %}
     {% else %}
+      <div id="addon-queue-filter-form">
+        <button class="show-hide-toggle">Show/Hide Filter Selections</button>
+        <form action="" method="get">
+          {{ filter_form }}
+          <input type="submit" value="Update Filters">
+        </form>
+      </div>
       <table id="addon-queue" class="data-grid" data-url="{{ url('reviewers.queue_viewing') }}">
         <thead>
           <tr class="listing-header">

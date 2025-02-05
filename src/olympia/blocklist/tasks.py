@@ -1,6 +1,8 @@
+import json
 import os
 import re
 from datetime import datetime, timedelta
+from typing import List
 
 from django.conf import settings
 from django.contrib.admin.models import CHANGE, LogEntry
@@ -18,12 +20,13 @@ from olympia.constants.blocklist import (
     MLBF_BASE_ID_CONFIG_KEY,
     MLBF_TIME_CONFIG_KEY,
     REMOTE_SETTINGS_COLLECTION_MLBF,
+    BlockListAction,
 )
 from olympia.lib.remote_settings import RemoteSettings
-from olympia.zadmin.models import set_config
+from olympia.zadmin.models import get_config, set_config
 
 from .mlbf import MLBF
-from .models import BlocklistSubmission
+from .models import BlocklistSubmission, BlockType
 from .utils import (
     datetime_to_ts,
 )
@@ -34,7 +37,22 @@ log = olympia.core.logger.getLogger('z.amo.blocklist')
 bracket_open_regex = re.compile(r'(?<!\\){')
 bracket_close_regex = re.compile(r'(?<!\\)}')
 
-BLOCKLIST_RECORD_MLBF_BASE = 'bloomfilter-base'
+
+def BLOCKLIST_RECORD_MLBF_BASE(block_type: BlockType):
+    match block_type:
+        case BlockType.SOFT_BLOCKED:
+            return 'softblocks-bloomfilter-base'
+        case BlockType.BLOCKED:
+            return 'bloomfilter-base'
+        case _:
+            raise ValueError(f'Unknown block type: {block_type}')
+
+
+@task
+def upload_mlbf_to_remote_settings_task(force_base=False):
+    from .cron import upload_mlbf_to_remote_settings
+
+    upload_mlbf_to_remote_settings(force_base=force_base)
 
 
 @task
@@ -43,15 +61,15 @@ def process_blocklistsubmission(multi_block_submit_id, **kw):
     obj = BlocklistSubmission.objects.get(pk=multi_block_submit_id)
     try:
         with transaction.atomic():
-            if obj.action == BlocklistSubmission.ACTION_ADDCHANGE:
-                # create the blocks from the guids in the multi_block
+            if obj.action in BlocklistSubmission.ACTIONS.SAVE_TO_BLOCK_OBJECTS:
+                # create/update the blocks from the guids in the multi_block
                 obj.save_to_block_objects()
-            elif obj.action == BlocklistSubmission.ACTION_DELETE:
-                # delete the blocks
+            elif obj.action in BlocklistSubmission.ACTIONS.DELETE_TO_BLOCK_OBJECTS:
+                # delete/update the blocks
                 obj.delete_block_objects()
     except Exception as exc:
         # If something failed reset the submission back to Pending.
-        obj.update(signoff_state=BlocklistSubmission.SIGNOFF_PENDING)
+        obj.update(signoff_state=BlocklistSubmission.SIGNOFF_STATES.PENDING)
         message = f'Exception in task: {exc}'
         LogEntry.objects.log_action(
             user_id=settings.TASK_USER_ID,
@@ -87,42 +105,124 @@ def monitor_remote_settings():
 
 
 @task
-def upload_filter(generation_time, is_base=True):
+def upload_filter(generation_time: str, actions: List[str] = None):
+    # Deserialize the actions from the string list
+    # We have to do this because celery does not support enum arguments
+    actions = [BlockListAction[action] for action in actions]
+
+    filters_to_upload = []
+    base_filter_ids = dict()
     bucket = settings.REMOTE_SETTINGS_WRITER_BUCKET
     server = RemoteSettings(
         bucket, REMOTE_SETTINGS_COLLECTION_MLBF, sign_off_needed=False
     )
-    mlbf = MLBF.load_from_storage(generation_time)
-    if is_base:
-        # clear the collection for the base - we want to be the only filter
-        server.delete_all_records()
-        statsd.incr('blocklist.tasks.upload_filter.reset_collection')
-        # Then the bloomfilter
+    mlbf = MLBF.load_from_storage(generation_time, error_on_missing=True)
+    # Download old records before uploading new ones.
+    # This ensures we do not delete any records we just uploaded.
+    old_records = server.records()
+    attachment_types_to_delete = []
+
+    if BlockListAction.UPLOAD_BLOCKED_FILTER in actions:
+        filters_to_upload.append(BlockType.BLOCKED)
+
+    if BlockListAction.UPLOAD_SOFT_BLOCKED_FILTER in actions:
+        filters_to_upload.append(BlockType.SOFT_BLOCKED)
+
+    # Get the last updated timestamp for each filter type
+    # regardless of whether we are uploading it or not.
+    # This will help us identify stale records that should be cleaned up.
+    for block_type in BlockType:
+        base_filter_id = get_config(
+            MLBF_BASE_ID_CONFIG_KEY(block_type, compat=True),
+            json_value=True,
+        )
+        # If there is an existing base filter id, we need to keep track of it
+        if base_filter_id is not None:
+            base_filter_ids[block_type] = base_filter_id
+
+    for block_type in filters_to_upload:
+        attachment_type = BLOCKLIST_RECORD_MLBF_BASE(block_type)
         data = {
             'key_format': MLBF.KEY_FORMAT,
             'generation_time': generation_time,
-            'attachment_type': BLOCKLIST_RECORD_MLBF_BASE,
+            'attachment_type': attachment_type,
         }
-        storage = SafeStorage(root_setting='MLBF_STORAGE_PATH')
-        with storage.open(mlbf.filter_path, 'rb') as filter_file:
+        with mlbf.storage.open(mlbf.filter_path(block_type), 'rb') as filter_file:
             attachment = ('filter.bin', filter_file, 'application/octet-stream')
             server.publish_attachment(data, attachment)
             statsd.incr('blocklist.tasks.upload_filter.upload_mlbf')
-        statsd.incr('blocklist.tasks.upload_filter.upload_mlbf.base')
-    else:
-        # If we have a stash, write that
-        stash_data = {
-            'key_format': MLBF.KEY_FORMAT,
-            'stash_time': generation_time,
-            'stash': mlbf.stash_json,
-        }
-        server.publish_record(stash_data)
-        statsd.incr('blocklist.tasks.upload_filter.upload_stash')
+            # After we have succesfully uploaded the new filter
+            # we can safely delete others of that type.
+            attachment_types_to_delete.append(attachment_type)
 
+        statsd.incr('blocklist.tasks.upload_filter.upload_mlbf.base')
+        # If we are re-uploading a filter, we should overwrite the timestamp
+        # to ensure we delete records older than the new filter and not the old one.
+        base_filter_ids[block_type] = generation_time
+
+    # It is possible to upload a stash and a filter in the same task.
+    if BlockListAction.UPLOAD_STASH in actions:
+        with mlbf.storage.open(mlbf.stash_path, 'r') as stash_file:
+            stash_data = json.load(stash_file)
+            stash_upload_data = {
+                'key_format': MLBF.KEY_FORMAT,
+                'stash_time': generation_time,
+                'stash': stash_data,
+            }
+            server.publish_record(stash_upload_data)
+            statsd.incr('blocklist.tasks.upload_filter.upload_stash')
+
+    # Get the oldest base filter id so we can identify stale records
+    # that should be removed from remote settings or file storage.
+    oldest_base_filter_id = min(base_filter_ids.values()) if base_filter_ids else None
+
+    for record in old_records:
+        if 'attachment' in record:
+            # Delete attachment records that match the
+            # attachment types of filters we just uploaded.
+            # This ensures we only have one filter attachment
+            # per block_type.
+            attachment_type = record['attachment_type']
+            if attachment_type in attachment_types_to_delete:
+                server.delete_record(record['id'])
+
+        elif 'stash' in record:
+            # Delete stash records if that is one of the actions to perform.
+            # Currently we have a brute force approach to clearing stashes
+            # because we always upload both filters together in order to prevent
+            # stale stashes from being used by FX instances. Eventually, we may
+            # want support independently uploading filters and stashes which would
+            # require a more fine grained approach to clearing or even re-writing
+            # stashes based on which filters are being re-uploaded.
+            if BlockListAction.CLEAR_STASH in actions:
+                server.delete_record(record['id'])
+
+    # Commit the changes to remote settings for review + signing.
+    # Only after any changes to records (attachments and stashes)
+    # and including deletions can we commit the session and update
+    # the config with the new timestamps.
     server.complete_session()
     set_config(MLBF_TIME_CONFIG_KEY, generation_time, json_value=True)
-    if is_base:
-        set_config(MLBF_BASE_ID_CONFIG_KEY, generation_time, json_value=True)
+
+    # Update the base_filter_id for uploaded filters.
+    for block_type in filters_to_upload:
+        # We currently write to the old singular config key for hard blocks
+        # to preserve backward compatibility.
+        # In https://github.com/mozilla/addons/issues/15193
+        # we can remove this and start writing to the new plural key.
+        if block_type == BlockType.BLOCKED:
+            set_config(
+                MLBF_BASE_ID_CONFIG_KEY(block_type, compat=True),
+                generation_time,
+                json_value=True,
+            )
+
+        set_config(
+            MLBF_BASE_ID_CONFIG_KEY(block_type), generation_time, json_value=True
+        )
+
+    cleanup_old_files.delay(base_filter_id=oldest_base_filter_id)
+    statsd.incr('blocklist.tasks.upload_filter.reset_collection')
 
 
 @task

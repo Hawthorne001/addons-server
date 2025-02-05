@@ -1,0 +1,247 @@
+name: CI
+
+on:
+  # Runs when there is a push to the default branch
+  # This triggers tests and a pushed "latest" image
+  # That is deployed to the "dev" environment
+  push:
+    branches:
+      - master
+  # Runs on pull requests to verify changes and push
+  # PR image for local testing
+  pull_request:
+  # Manually dispatch run entire CI on a ref
+  workflow_dispatch:
+  # Runs when a release is published
+  # Pushes a tagged image
+  # That is deployed to the "staging/production" environments
+  release:
+    types: [published]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name}}-${{ github.ref}}
+  cancel-in-progress: true
+
+env:
+  docs_artifact: docs
+
+jobs:
+  context:
+    runs-on: ubuntu-latest
+
+    outputs:
+      is_fork: ${{ steps.context.outputs.is_fork }}
+      is_release_master: ${{ steps.context.outputs.is_release_master }}
+      is_dependabot: ${{ steps.context.outputs.is_dependabot }}
+      is_default_branch: ${{ steps.context.outputs.is_default_branch }}
+      is_release_tag: ${{ steps.context.outputs.is_release_tag }}
+      docker_version: ${{ steps.context.outputs.docker_version }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set context
+        id: context
+        uses: ./.github/actions/context
+
+  build:
+    name: ${{ needs.context.outputs.is_fork == 'true' && 'Skip' || 'Build' }}  CI Image
+    runs-on: ubuntu-latest
+    needs: context
+
+    outputs:
+      # If build is skipped we should pass local version to build the image
+      version: ${{ steps.build.outputs.version || 'local' }}
+      digest: ${{ steps.build.outputs.digest || '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Dockerhub
+        if: needs.context.outputs.is_fork == 'false'
+        id: docker_hub
+        uses: ./.github/actions/login-docker
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASS }}
+
+      - name: Build and Push Image
+        if: steps.docker_hub.outcome == 'success'
+        id: build
+        uses: ./.github/actions/build-docker
+        with:
+          registry: ${{ steps.docker_hub.outputs.registry }}
+          image: ${{ steps.docker_hub.outputs.image }}
+          version: ci-${{ needs.context.outputs.docker_version }}
+          push: true
+
+  docs_build:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v4
+
+      - name: Build Docs
+        uses: ./.github/actions/run-docker
+        with:
+          digest: ${{ needs.build.outputs.digest }}
+          version: ${{ needs.build.outputs.version }}
+          deps: development
+          target: development
+          run: |
+            make docs
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'docs/_build/html'
+          name: ${{ env.docs_artifact }}
+
+  docs_deploy:
+    needs: [context, docs_build]
+    # Only deploy docs on a push event
+    # to the default branch
+    # that is not running on a fork
+    if: |
+      github.event_name == 'push' &&
+      needs.context.outputs.is_default_branch == 'true' &&
+      needs.context.outputs.is_fork == 'false'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: ${{ env.docs_artifact }}
+
+  locales:
+    runs-on: ubuntu-latest
+    needs: [build, context]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+      - name: Extract Locales
+        uses: ./.github/actions/run-docker
+        with:
+          digest: ${{ needs.build.outputs.digest }}
+          version: ${{ needs.build.outputs.version }}
+          deps: development
+          run: make extract_locales
+
+      - name: Push Locales
+        if:  |
+          github.event_name == 'push' ||
+          github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          is_fork="${{ needs.context.outputs.is_fork }}"
+          is_default_branch="${{ needs.context.outputs.is_default_branch }}"
+          is_push="${{ github.event_name == 'push' }}"
+
+          if [[ "$is_fork" == 'true' ]]; then
+            cat <<'EOF'
+              Github actions are not authorized to push from workflows triggered by forks.
+              We cannot verify if the l10n extraction push will work or not.
+              Please submit a PR from the base repository if you are modifying l10n extraction scripts.
+          EOF
+          else
+            if [[ "$is_default_branch" == 'true' && "$is_push" == 'true' ]]; then
+              args=""
+            else
+              args="--dry-run"
+            fi
+            make push_locales ARGS="${args}"
+          fi
+
+  test:
+    needs: build
+    uses: ./.github/workflows/_test.yml
+    with:
+      version: ${{ needs.build.outputs.version }}
+      digest: ${{ needs.build.outputs.digest }}
+
+  test_main:
+    needs: [context, build]
+    uses: ./.github/workflows/_test_main.yml
+    with:
+      version: ${{ needs.build.outputs.version }}
+      digest: ${{ needs.build.outputs.digest }}
+
+  test_check:
+    needs: [context, build]
+    uses: ./.github/workflows/_test_check.yml
+    with:
+      version: ${{ needs.build.outputs.version }}
+      digest: ${{ needs.build.outputs.digest }}
+
+  push_dockerhub:
+    name: Push Production Docker Image (Dockerhub)
+    runs-on: ubuntu-latest
+    if: |
+      needs.context.outputs.is_release_master == 'true' ||
+      needs.context.outputs.is_release_tag == 'true'
+    needs: [context, build, docs_build, locales, test, test_main]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Dockerhub
+        id: docker_hub
+        uses: ./.github/actions/login-docker
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASS }}
+
+      - name: Build and Push Image
+        id: build
+        uses: ./.github/actions/build-docker
+        with:
+          registry: ${{ steps.docker_hub.outputs.registry }}
+          image: ${{ steps.docker_hub.outputs.image }}
+          version: ${{ needs.context.outputs.docker_version }}
+          push: true
+
+  push_gar:
+    name: Push Production Docker Image (GAR)
+    runs-on: ubuntu-latest
+    if: |
+      needs.context.outputs.is_release_master == 'true' ||
+      needs.context.outputs.is_release_tag == 'true'
+    needs: [context, build, docs_build, locales, test, test_main]
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GAR
+        id: docker_gar
+        uses: ./.github/actions/login-gar
+        with:
+          service_account: ${{ secrets.GAR_PUSHER_SERVICE_ACCOUNT_EMAIL }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+
+      - name: Build and Push Image
+        id: build
+        uses: ./.github/actions/build-docker
+        with:
+          registry: ${{ steps.docker_gar.outputs.registry }}
+          image: ${{ steps.docker_gar.outputs.image }}
+          version: ${{ needs.context.outputs.docker_version }}
+          push: true

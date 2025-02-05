@@ -1,0 +1,72 @@
+name: Test Docker Image
+
+run-name: |
+  ref: ${{ github.ref_name }} |
+  version: ${{ inputs.version }} |
+  digest: ${{ inputs.digest }} |
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The version of the image to run
+        type: string
+        required: true
+      digest:
+        description: The build digest of the image to run. Overrides version.
+        type: string
+        required: false
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version of the image to run
+        type: string
+        required: true
+      digest:
+        description: The build digest of the image to run. Overrides version.
+        type: string
+        required: false
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.event_name}}-${{ github.ref}}-${{ toJson(inputs) }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          -
+            name: Needs Locale Compilation
+            services: ''
+            run: |
+              make compile_locales
+              make test_needs_locales_compilation
+          -
+            name: Static Assets
+            services: ''
+            run: make test_static_assets
+          -
+            name: Internal Routes
+            services: ''
+            run: make test_internal_routes_allowed
+          -
+            name: Elastic Search
+            services: ''
+            run: make test_es_tests
+          -
+            name: Codestyle
+            services: web
+            run: make lint-codestyle
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test (${{ matrix.name }})
+        uses: ./.github/actions/run-docker
+        with:
+          version: ${{ inputs.version }}
+          digest: ${{ inputs.digest }}
+          services: ${{ matrix.services }}
+          deps: development
+          run: ${{ matrix.run }}

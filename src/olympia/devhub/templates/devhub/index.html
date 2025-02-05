@@ -34,14 +34,15 @@
       <meta name="csrf" content="{{ csrf_token }}">
     {% endif %}
 
-    {% if settings.DEBUG %}
+    {% if settings.DEV_MODE %}
       {% if settings.LESS_LIVE_REFRESH %}
         <meta id="live_refresh" name="live_refresh" value="1">
       {% endif %}
       {{ js('debug') }}
     {% endif %}
 
-    {{ js('preload') }}
+    {{ js('jquery_base') }}
+    {{ vite_asset('js/preload.js') }}
   </head>
   {% set user_authenticated = request.user.is_authenticated %}
 

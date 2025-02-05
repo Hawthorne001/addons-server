@@ -2,6 +2,8 @@ from ipaddress import IPv4Address
 from unittest.mock import Mock
 from uuid import UUID
 
+from django.core.files.base import ContentFile
+
 from pyquery import PyQuery as pq
 
 from olympia import amo, core
@@ -11,10 +13,12 @@ from olympia.activity.models import (
     ActivityLog,
     ActivityLogToken,
     AddonLog,
+    AttachmentLog,
     DraftComment,
     GenericMozillaUser,
     IPLog,
     ReviewActionReasonLog,
+    attachment_upload_path,
 )
 from olympia.addons.models import Addon, AddonUser
 from olympia.amo.tests import (
@@ -70,12 +74,12 @@ class TestActivityLogToken(TestCase):
         )
         assert token_from_db.use_count == 1
 
-    def test_validity_version_out_of_date(self):
+    def test_validity_old_version(self):
         version_factory(addon=self.addon, channel=amo.CHANNEL_LISTED)
-        # The token isn't expired.
+        # The token isn't expired and is still valid, it's just not for the
+        # latest version.
         assert not self.token.is_expired()
-        # But is invalid, because the version isn't the latest version.
-        assert not self.token.is_valid()
+        assert self.token.is_valid()
 
     def test_validity_still_valid_if_new_version_in_different_channel(self):
         version_factory(addon=self.addon, channel=amo.CHANNEL_UNLISTED)
@@ -85,14 +89,137 @@ class TestActivityLogToken(TestCase):
 
         # The token isn't expired.
         assert not self.token.is_expired()
-        # It's also still valid, since our version is still the latest listed
-        # one.
+        # It's also still valid (the fact that we added a new version in
+        # another channel doesn't change that).
         assert self.token.is_valid()
 
     def test_rejected_version_still_valid(self):
         self.version.file.update(status=amo.STATUS_DISABLED)
         # Being a rejected version shouldn't mean you can't reply
         assert self.token.is_valid()
+
+
+class TestActivityLogManager(TestCase):
+    def test_pending_for_developer(self):
+        to_create = (
+            # Tests with Developer_Reply
+            (
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                amo.LOG.DEVELOPER_REPLY_VERSION,
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                1,
+            ),
+            (
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                amo.LOG.DEVELOPER_REPLY_VERSION,
+                0,
+            ),
+            # Tests with Approval
+            (
+                amo.LOG.APPROVE_VERSION,
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                2,
+            ),
+            (
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                amo.LOG.APPROVE_VERSION,
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                1,
+            ),
+            (
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                amo.LOG.APPROVE_VERSION,
+                0,
+            ),
+            # Tests with Rejection
+            (
+                amo.LOG.REJECT_VERSION,
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                2,
+            ),
+            (
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                amo.LOG.REJECT_VERSION,
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                1,
+            ),
+            (
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                amo.LOG.REJECT_VERSION,
+                0,
+            ),
+            # Test with no approve or reject
+            (
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                amo.LOG.REVIEWER_REPLY_VERSION,
+                3,
+            ),
+        )
+
+        user = user_factory()
+        addon = addon_factory()
+        expected = []
+        for action1, action2, action3, count in to_create:
+            version = version_factory(addon=addon)
+            logs = (
+                ActivityLog.objects.create(action1, addon, version, user=user),
+                ActivityLog.objects.create(action2, addon, version, user=user),
+                ActivityLog.objects.create(action3, addon, version, user=user),
+            )
+            logs[-3].update(created=self.days_ago(2))
+            logs[-2].update(created=self.days_ago(1))
+            logs[-1].update(created=self.days_ago(0))
+            if count:
+                expected.extend(logs[-count:])
+        results = list(ActivityLog.objects.for_addons(addon).pending_for_developer())
+        assert len(results) == len(expected)
+        assert set(results) == set(expected)
+
+    def test_with_reply_going_to_multiple_versions_with_developer_reply(self):
+        user = user_factory()
+        addon = addon_factory()
+        v1 = addon.current_version
+        v2 = version_factory(addon=addon)
+        # Make a reviewer reply on both versions
+        grouped_reviewer_reply = ActivityLog.objects.create(
+            amo.LOG.REVIEWER_REPLY_VERSION,
+            addon,
+            v1,
+            v2,
+            user=user,
+        )
+        grouped_reviewer_reply.update(created=self.days_ago(42))
+        # Make the developer reply only on one of the versions
+        developer_reply_on_v1 = ActivityLog.objects.create(
+            amo.LOG.DEVELOPER_REPLY_VERSION,
+            addon,
+            v1,
+            user=user,
+        )
+        developer_reply_on_v1.update(created=self.days_ago(41))
+
+        # Extra data that shouldn't be relevant
+        version_factory(addon=addon)
+        extra_addon = addon_factory()
+        ActivityLog.objects.create(
+            amo.LOG.REVIEWER_REPLY_VERSION,
+            extra_addon,
+            extra_addon.current_version,
+            user=user,
+        )
+        results = list(
+            ActivityLog.objects.for_versions(
+                addon.versions.all()
+            ).pending_for_developer()
+        )
+        assert len(results) == 1
+        assert results[0] == grouped_reviewer_reply
 
 
 class TestActivityLog(TestCase):
@@ -324,12 +451,10 @@ class TestActivityLog(TestCase):
         # Creating an activity log with one or more`reason` arguments does
         # create ReviewActionReasonLogs.
         reason_1 = ReviewActionReason.objects.create(
-            name='a reason',
-            is_active=True,
+            name='a reason', is_active=True, canned_response='.'
         )
         reason_2 = ReviewActionReason.objects.create(
-            name='reason 2',
-            is_active=True,
+            name='reason 2', is_active=True, canned_response='.'
         )
         ActivityLog.objects.create(
             action,
@@ -508,6 +633,13 @@ class TestActivityLog(TestCase):
         assert (
             ActivityLog.objects.create(action=amo.LOG.ADD_TAG.id).log == amo.LOG.ADD_TAG
         )
+
+    def test_attachment_upload_path(self):
+        log = ActivityLog.objects.create(amo.LOG.CUSTOM_TEXT, 'Test Attachment Log')
+        attachment = ContentFile('Pseudo File', name='attachment.txt')
+        attachment_log = AttachmentLog.objects.create(activity_log=log, file=attachment)
+        uploaded_name = attachment_upload_path(attachment_log, attachment.name)
+        assert uploaded_name.endswith('.txt')
 
 
 class TestDraftComment(TestCase):

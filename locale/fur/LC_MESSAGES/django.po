@@ -2,14 +2,14 @@
 # Copyright (C) 2023 Mozilla
 # This file is distributed under the same license as the addons-server project.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2023.
-# 
+#
 #, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: addons-server 1.0\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-05-14 15:43+0000\n"
-"PO-Revision-Date: 2024-05-19 03:50+0000\n"
+"POT-Creation-Date: 2025-02-03 14:26+0000\n"
+"PO-Revision-Date: 2024-11-01 07:18+0000\n"
 "Last-Translator: Fabio Tomat <dark.tmtfx@gmail.com>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "Language: fur\n"
@@ -19,6 +19,9 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "Generated-By: Babel 2.12.1\n"
 "X-Generator: Pontoon\n"
+
+msgid "Mozilla Add-ons: {} [{}]"
+msgstr "Mozilla Add-ons: {} [{}]"
 
 msgid "Email address"
 msgstr "Direzion e-mail"
@@ -32,26 +35,17 @@ msgstr "Motîf dal ricors"
 msgid "Please explain why you believe that this decision was made in error, and/or does not align with the applicable policy or law."
 msgstr "Par plasê spieghe parcè che tu crodis che cheste decision e je stade fate par erôr e/o che no je in linie cu lis regulis o lis leçs aplicabilis."
 
+msgid "User profile"
+msgstr "Profîl utent"
+
+msgid "\"{}\" for {}"
+msgstr "“{}” par {}"
+
 msgid "Please ensure this field has no more than {max_length} characters."
 msgstr "Siguriti che chest cjamp nol vedi plui di {max_length} caratars."
 
 msgid "Invalid value"
 msgstr "Valôr no valit"
-
-msgid "\"{}\" for {}"
-msgstr "“{}” par {}"
-
-msgid "User profile"
-msgstr "Profîl utent"
-
-msgid "Collection"
-msgstr "Racuelte"
-
-msgid "Rating"
-msgstr "Valutazion"
-
-msgid "Mozilla Add-ons: {} [{}]"
-msgstr "Mozilla Add-ons: {} [{}]"
 
 msgid "Appeal reviewer decision"
 msgstr "Fâs ricors pe decision dal revisôr"
@@ -77,6 +71,9 @@ msgstr ""
 msgid "Because the decision you are appealing has already been overturned, your appeal will not be processed."
 msgstr "Viodût che il to ricors al rivuarde une decision che e je za stade anulade, nol vignarà elaborât."
 
+msgid "The decision you are appealing has already been overridden by a new decision, so this decision can't be appealed."
+msgstr ""
+
 msgid "This decision can't be appealed."
 msgstr "Nol è pussibil impugnâ cheste decision."
 
@@ -92,15 +89,17 @@ msgid ""
 "Thank you for your report about %(name)s on Mozilla Add-ons, and for providing more information about your concerns.\n"
 "\n"
 "After reviewing your appeal, we determined that the previous decision, that this content does not violate Mozilla’s policies (%(policy_document_url)s), was correct. Based on that determination, we have denied your appeal, and will not take any action against the account or the content.\n"
+"%(manual_reasoning_text)s.\n"
 "\n"
 "Thank you for your attention.\n"
 msgstr ""
 "\n"
-"Graciis de segnalazion di %(name)s su Mozilla Add-ons e par vê dât plui informazions sui tiei dubis.\n"
+"Graciis di vênus segnalât %(name)s su Mozilla Add-ons e par vê indicât altris informazions in merit ai tiei dubis.\n"
 "\n"
-"Dopo vê revisionât il to ricors, o vin stabilît che la decision precedente, vâl a dî che chescj contignûts no violin lis politichis di Mozilla (%(policy_document_url)s), e jere juste. Su la fonde di cheste delibere, o vin dineât il to ricors e no fasarìn nuie cuintri l'account o i contignûts.\n"
+"Dopo vê revisionât il to ricors, o vin stabilît che la decision di prime, vâl a dî che chescj contignûts no violin lis normis di Mozilla (%(policy_document_url)s), e jere juste. Su la fonde di cheste delibere, o vin refudât il to ricors e no fasarìn nuie cuintri l’account o i contignûts.\n"
+"%(manual_reasoning_text)s.\n"
 "\n"
-"Graciis pe tô atenzion.\n"
+"Graciis pe atenzion.\n"
 
 #, python-format
 msgid ""
@@ -243,11 +242,11 @@ msgstr[1] "Versions {0}"
 msgid "Review note"
 msgstr "Note di revision"
 
-msgid "Only latest versions of addons can have notes added."
-msgstr "Dome lis ultimis versions dai components adizionâi a puedin vê zontadis lis notis."
-
 msgid "Request content length is too large."
 msgstr "La lungjece dal contignût de richieste al è masse grant."
+
+msgid "Add-on uploads are temporarily unavailable."
+msgstr "Il cjariament in rêt di components adizionâi nol è disponibil pal moment."
 
 msgid "Maximum number of categories per application ({MAX_CATEGORIES}) exceeded"
 msgstr "Numar massim di categoriis par aplicazion ({MAX_CATEGORIES}) superât"
@@ -298,9 +297,6 @@ msgstr "Listât"
 
 msgid "Add-on and collection paths need to end with \"/\""
 msgstr "I percors di components adizionâi e di racueltis a scugnin finî cul caratar “/”"
-
-msgid "Previews cannot be created for themes."
-msgstr "Nol è pussibil creâ anteprimis pai temis."
 
 msgid "Built in licenses can not be updated."
 msgstr "Nol è pussibil inzornâ lis licencis integradis."
@@ -388,6 +384,9 @@ msgstr "Nol è pussibil cambiâ il codiç sorzint parcè che cheste version e je
 msgid "This type of add-on does not allow custom compatibility."
 msgstr "Chest gjenar di component adizionâl nol amet compatibilitâts personalizadis."
 
+msgid "This endpoint is not valid for Themes."
+msgstr "Chest pont terminâl nol è valit pai temis."
+
 msgid "My Add-ons"
 msgstr "I miei components adizionâi"
 
@@ -447,6 +446,9 @@ msgstr "CIDR"
 
 msgid "Some features are temporarily disabled while we perform website maintenance. We'll be back to full capacity shortly."
 msgstr "Cualchi funzion pal moment e je disativade par lavôrs di manutenzion. Ca di pôc o tornarìn ae normâl funzionalitât."
+
+msgid "URLs are not allowed."
+msgstr "I URLs no son consintûts."
 
 msgid "Must contain at least one printable character."
 msgstr "Al scugne contignî almancul un caratar stampabil."
@@ -543,6 +545,12 @@ msgstr "Cheste funzion e je pal moment disativade intant che o fasìn lavôrs di
 msgid "Some features on this page are temporarily disabled while we perform website maintenance. Please try again a little later."
 msgstr "Cualchi funzion su cheste pagjine e je disativade in mût temporani intant che o fasìn lavôrs di manutenzion sul sît web. Torne prove plui tart."
 
+msgid "Add-on uploads temporarily disabled"
+msgstr "Cjariament in rêt di components adizionâi disativât in mût temporani"
+
+msgid "Add-on uploads have been temporarily disabled. Please check back later."
+msgstr "Il cjariament in rêt di components adizionâi al è stât disativât pal moment. Torne prove plui indevant."
+
 msgid "Add-ons for {0}"
 msgstr "Components adizionâi par {0}"
 
@@ -632,6 +640,12 @@ msgstr "Nol è pussibil doprâ chest URL personalizât."
 msgid "This add-on already belongs to the collection"
 msgstr "Chest component adizionâl al aparten za ae racuelte"
 
+msgid "Blocked"
+msgstr "Blocât"
+
+msgid "Restricted"
+msgstr "Limitât"
+
 msgid "{addon} was created."
 msgstr "{addon} al è stât creât."
 
@@ -705,12 +719,6 @@ msgstr "{addon} {version} mantignût in code."
 msgid "Retained"
 msgstr "Mantignût in code"
 
-msgid "{addon} {version} escalated."
-msgstr "{addon} {version} mandât indenant par progression."
-
-msgid "Super review requested"
-msgstr "Domandade super-revision"
-
 msgid "{addon} {version} review requested."
 msgstr "Domandade revision par {addon} {version}."
 
@@ -723,16 +731,10 @@ msgstr "Domandadis informazions in plui par {addon} {version}."
 msgid "More information requested"
 msgstr "Domandadis informazions in plui"
 
-msgid "{addon} {version} super review requested."
-msgstr "Domandade super-revision par {addon} {version}."
-
 msgid "The add-on has been flagged for Admin Review. It's still in our review queue, but it will need to be checked by one of our admin reviewers. The review might take longer than usual."
 msgstr ""
 "Par chest component adizionâl e je stade domandade la super-revision di un revisôr cun privileçs di aministradôr. Il component al è simpri te code di revision, ma la operazion e podarès puartâ vie "
 "plui timp dal solit."
-
-msgid "Commented"
-msgstr "Comentât"
 
 msgid "{tag} added to {addon}."
 msgstr "{tag} zontât a {addon}."
@@ -748,20 +750,6 @@ msgstr "{addon} gjavât di {collection}."
 
 msgid "{rating} for {addon} written."
 msgstr "Scrite {rating} par {addon}."
-
-#. L10n: {0} is a category name.
-msgid "{addon} featured in {0}."
-msgstr "{addon} in risalt in {0}."
-
-#. L10n: {0} is a category name.
-msgid "{addon} no longer featured in {0}."
-msgstr "{addon} nol è plui in risalt in {0}."
-
-msgid "{addon} is now featured."
-msgstr "{addon} cumò al è in risalt."
-
-msgid "{addon} is no longer featured."
-msgstr "{addon} nol è plui in risalt."
 
 #. L10n: {0} is the application, {1} is the version of the app
 msgid "{0} {1} added."
@@ -810,45 +798,21 @@ msgstr "Account inzornât."
 msgid "Account {user} deleted."
 msgstr "Account {user} eliminât."
 
-msgid "Created: {0}."
-msgstr "Creât: {0}."
-
-msgid "Edited field: {2} set to: {0}."
-msgstr "Modificât cjamp: {2} metût a: {0}."
-
-msgid "Deleted: {1}."
-msgstr "Eliminât: {1}."
-
 msgid "{rating} for {addon} updated."
 msgstr "{rating} par {addon} inzornade."
 
 msgid "{addon} reviewed."
 msgstr "{addon} revisionât."
 
-msgid "User {user} banned."
-msgstr "Utent {user} bandît."
-
-msgid "User {user} picture deleted."
-msgstr "Foto utent di {user} eliminade."
-
-msgid "User {user} added to {group}."
-msgstr "L’utent {user} al è stât zontât al grup {group}."
-
-msgid "User {user} removed from {group}."
-msgstr "L’utent {user} al è stât gjavât dal grup {group}."
-
 msgid "{addon} unlisted."
 msgstr "{addon} no listât."
-
-msgid "{file} was signed."
-msgstr "Il file {file} al è stât firmât."
 
 #. L10n: {0} is the add-on GUID.
 msgid "Add-on id {0} with GUID {1} has been deleted"
 msgstr "L’id dal component adizionâl {0} cun GUID {1} al è stât eliminât"
 
-msgid "{addon} migrated from preliminary."
-msgstr "{addon} migrât de revision preliminâr."
+msgid "{file} was signed."
+msgstr "Il file {file} al è stât firmât."
 
 msgid "Reply by developer on {addon} {version}."
 msgstr "Rispueste dal svilupadôr su {addon} {version}."
@@ -874,53 +838,17 @@ msgstr "Il codiç sorzint di {addon} {version} al è stât cjariât in rêt."
 msgid "Source code uploaded"
 msgstr "Codiç sorzint cjariât in rêt"
 
-msgid "{addon} {version} auto-approval confirmed."
-msgstr "Aprovazion automatiche di {addon} {version} confermade."
-
-msgid "Auto-Approval confirmed"
-msgstr "Aprovazion automatiche confermade"
-
 msgid "{addon} {version} re-enabled."
 msgstr "{addon} {version} riativât."
 
 msgid "{addon} {version} disabled."
 msgstr "{addon} {version} disativât."
 
-msgid "{addon} {version} content approved."
-msgstr "Contignûts di {addon} {version} aprovâts."
-
-msgid "Content approved"
-msgstr "Contignûts aprovâts"
-
 msgid "{addon} {version} content rejected."
 msgstr "Contignûts di {addon} {version} refudâts."
 
 msgid "Content rejected"
 msgstr "Contignûts refudâts"
-
-msgid "{addon} information request altered or removed by admin."
-msgstr "Richieste informazions par {addon} alterade o gjavade dal aministradôr."
-
-msgid "Information request altered"
-msgstr "Richieste informazions alterade"
-
-msgid "Information request cleared by developer on {addon} {version}."
-msgstr "Richieste informazions risolte dal svilupadôr su {addon} {version}."
-
-msgid "Information request removed"
-msgstr "Richieste informazions gjavade"
-
-msgid "{addon} {version} admin add-on-review requested."
-msgstr "Richieste revision de bande di un aministradôr par {addon} {version}."
-
-msgid "Admin add-on-review requested"
-msgstr "Richieste revision de bande di un aministradôr pal component adizionâl"
-
-msgid "{addon} {version} admin content-review requested."
-msgstr "Richieste revision contignûts de bande di un aministradôr par {addon} {version}."
-
-msgid "Admin content-review requested"
-msgstr "Richieste revision contignûts de bande di un aministradôr"
 
 msgid "{addon} {version} admin theme-review requested."
 msgstr "Richieste revision teme de bande di un aministradôr par {addon} {version}."
@@ -930,42 +858,6 @@ msgstr "Richieste revision teme de bande di un aministradôr"
 
 msgid "{addon} was migrated from a lightweight theme."
 msgstr "{addon} al à fat la migrazion di un teme lizêr."
-
-msgid "User {user} api key reset."
-msgstr "La clâf API dal utent {user} e je stade ripristinade."
-
-msgid "Block for {0} added to Blocklist."
-msgstr "Bloc par {0} zontât ae liste di bloc."
-
-msgid "Block added"
-msgstr "Bloc zontât"
-
-msgid "Block for {0} edited in Blocklist."
-msgstr "Bloc par {0} modificât te liste di bloc."
-
-msgid "Block edited"
-msgstr "Bloc modificât"
-
-msgid "Block for {0} deleted from Blocklist."
-msgstr "Bloc par {0} eliminât de liste di bloc."
-
-msgid "Block deleted"
-msgstr "Bloc eliminât"
-
-msgid "GUID for {addon} added to DeniedGuid."
-msgstr "GUID par {addon} zontât a DeniedGuid."
-
-msgid "GUID for {addon} removed from DeniedGuid."
-msgstr "GUID par {addon} gjavât di DeniedGuid."
-
-msgid "Block {1} action for {0} signed off."
-msgstr "Bloche azion {1} par {0} firmât."
-
-msgid "Block action signoff"
-msgstr "Bloche azion di firme"
-
-msgid "User {user} session(s) reset."
-msgstr "Session(s) utent {user} ripristinade/is."
 
 msgid "{addon} {version} content reject scheduled."
 msgstr "Programât refudament contignûts di {addon} {version}."
@@ -1006,24 +898,6 @@ msgstr "Cancelât refudament in spiete par {addon} {version}."
 msgid "Pending rejection cleared"
 msgstr "Cancelât refudament in spiete"
 
-msgid "{version} added to Blocklist."
-msgstr "{version} zontade ae liste di bloc."
-
-msgid "Version Blocked"
-msgstr "Version blocade"
-
-msgid "{version} removed from Blocklist."
-msgstr "{version} gjavade de liste di bloc."
-
-msgid "Version Unblocked"
-msgstr "Version sblocade"
-
-msgid "{addon} {version} admin add-on-review cleared."
-msgstr "Un aministradôr al à gjavât add-on-review par {addon} {version}."
-
-msgid "Admin add-on-review cleared"
-msgstr "Un aministradôr al à gjavât add-on-review"
-
 msgid "{user_responsible} changed {addon} slug from {0} to {1}."
 msgstr "{user_responsible} al/e à modificât il slug par {addon} di {0} a {1}."
 
@@ -1039,11 +913,23 @@ msgstr "Racuelte {collection} ripristinade di un moderadôr"
 msgid "Review {rating} for {addon} un-deleted."
 msgstr "Recension {rating} par {addon} ripristinade."
 
-msgid "User {user} content restored."
-msgstr "Contignûts utent di {user} ripristinâts."
+msgid "{addon} {version} rejected automatically after delay expired."
+msgstr "{addon} {version} refudât in automatic dopo de scjadince dal diferiment."
 
-msgid "User {user} unbanned."
-msgstr "L’utent {user} nol è plui bandît."
+msgid "Rejected automatically after delay expired"
+msgstr "Refudât in automatic dopo de scjadince dal diferiment"
+
+msgid "{addon} {version} content rejected automatically after delay expired."
+msgstr "Contignûts di {addon} {version} refudâts in automatic dopo de scjadince dal diferiment."
+
+msgid "Content rejected automatically after delay expired"
+msgstr "Contignûts refudâts in automatic dopo de scjadince dal diferiment"
+
+msgid "{addon} {version} pending rejection changed."
+msgstr ""
+
+msgid "Pending rejection changed"
+msgstr ""
 
 msgid "Firefox"
 msgstr "Firefox"
@@ -1158,16 +1044,6 @@ msgstr "Temis"
 
 msgid "Deprecated Site Permissions"
 msgstr "“Permès sîts\" sorpassâts"
-
-msgid "Accessibility"
-msgstr "Acès facilitât"
-
-msgid ""
-"Download Firefox accessibility extensions to help you consume content and navigate online in ways that work best for you. Discover extensions that remove or reduce barriers to access by changing "
-"screen brightness, reading web pages aloud, providing precision magnification, and more."
-msgstr ""
-"Discjame lis estension par Firefox dedicadis al acès facilitât: ti judaran a gjoldi i contignûts in rêt e navigâ te maniere plui juste pes tôs dibisugnis. Scuvierç estension che a gjavin o a ridusin"
-" lis barieris che a impedissin l’acès ai contignûts, modificant la luminositât dal schermi, leint lis pagjinis web a vôs alte, ingrandint il test in mût precîs e tant altri."
 
 msgid "Alerts & Updates"
 msgstr "Avîs & inzornaments"
@@ -1369,23 +1245,32 @@ msgstr "Gjenerâl"
 msgid "Mozilla Public License 2.0"
 msgstr "Mozilla Public License 2.0"
 
-msgid "GNU General Public License v2.0"
-msgstr "GNU General Public License v2.0"
+msgid "Apache License 2.0"
+msgstr ""
 
-msgid "GNU General Public License v3.0"
-msgstr "GNU General Public License v3.0"
+msgid "GNU General Public License v2.0 only"
+msgstr ""
 
-msgid "GNU Library General Public License v2.1"
-msgstr "GNU Library General Public License v2.1"
+msgid "GNU General Public License v3.0 only"
+msgstr ""
 
-msgid "GNU Library General Public License v3.0"
-msgstr "GNU Library General Public License v3.0"
+msgid "GNU Lesser General Public License v2.1 only"
+msgstr ""
 
-msgid "The MIT License"
-msgstr "Licence MIT"
+msgid "GNU Lesser General Public License v3.0 only"
+msgstr ""
 
-msgid "The BSD License"
-msgstr "Licence BSD"
+msgid "GNU Affero General Public License v3.0 only"
+msgstr ""
+
+msgid "MIT License"
+msgstr ""
+
+msgid "ISC License"
+msgstr ""
+
+msgid "BSD 2-Clause \"Simplified\" License"
+msgstr ""
 
 msgid "Mozilla Public License 1.1"
 msgstr "Mozilla Public License 1.1"
@@ -1411,17 +1296,32 @@ msgstr "Creative Commons Atribuzion-No oparis derivadis 3.0"
 msgid "Creative Commons Attribution-ShareAlike 3.0"
 msgstr "Creative Commons Atribuzion-Condivît te stesse maniere 3.0"
 
+msgid "Creative Commons Attribution 4.0"
+msgstr "Creative Commons Atribuzion 4.0"
+
+msgid "Creative Commons Attribution-NonCommercial 4.0"
+msgstr "Creative Commons Atribuzion-No comerciâl 4.0"
+
+msgid "Creative Commons Attribution-NonCommercial-NoDerivs 4.0"
+msgstr "Creative Commons Atribuzion-No comerciâl-No oparis derivadis 4.0"
+
+msgid "Creative Commons Attribution-NonCommercial-Share Alike 4.0"
+msgstr "Creative Commons Atribuzion-No Comerciâl-Condividi te stesse maniere 4.0"
+
+msgid "Creative Commons Attribution-NoDerivs 4.0"
+msgstr "Creative Commons Atribuzion-No oparis derivadis 4.0"
+
+msgid "Creative Commons Attribution-ShareAlike 4.0"
+msgstr "Creative Commons Atribuzion-Condividi te stesse maniere 4.0"
+
+msgid "The Unlicense"
+msgstr ""
+
 msgid "Not Promoted"
 msgstr "No promot"
 
 msgid "Recommended"
 msgstr "Conseât"
-
-msgid "Sponsored"
-msgstr "Sponsorizât"
-
-msgid "Verified"
-msgstr "Verificât"
 
 msgid "By Firefox"
 msgstr "Di Firefox"
@@ -1672,6 +1572,43 @@ msgstr ""
 msgid "Display Name"
 msgstr "Non visualizât"
 
+msgid "Confirm email address"
+msgstr "Conferme la direzion e-mail"
+
+msgid "Generate new credentials"
+msgstr "Gjenere gnovis credenziâls"
+
+msgid "Revoke and regenerate credentials"
+msgstr "Revoche e torne a gjenerâ credenziâls"
+
+msgid "Revoke"
+msgstr "Revoche"
+
+msgid "JWT issuer"
+msgstr "Emitent JWT"
+
+msgid ""
+"To make API requests, send a <a href=\"{jwt_url}\">JSON Web Token (JWT)</a> as the authorization header. You'll need to generate a JWT for every request as explained in the <a "
+"href=\"{docs_url}\">API documentation</a>."
+msgstr ""
+"Par doprâ lis API, fâs une domande includint un <a href=\"{jwt_url}\">JSON Web Token (JWT)</a> tant che intestazion di autorizazion. Al coventarà creâ un gjeton JWT par ogni singule richieste, come "
+"specificât te <a href=\"{docs_url}\">documentazion des API</a>."
+
+msgid "JWT secret"
+msgstr "Segret JWT"
+
+msgid "Please click the confirm button below to generate API credentials for user <strong>{name}</strong>."
+msgstr "Fâs clic sul boton di conferme chi sot par gjenerâ lis credenziâls API pal utent <strong>{name}</strong>."
+
+msgid "A confirmation link will be sent to your email address. After confirmation you will find your API keys on this page."
+msgstr "Un colegament di conferme ti vignarà inviât ae tô direzion e-mail. Dopo de conferme tu cjatarâs lis tôs clâfs API in cheste pagjine."
+
+msgid "You don't have any API credentials."
+msgstr "No tu âs nissune credenziâl API."
+
+msgid "Something went wrong, please contact developer support."
+msgstr "Alc al è lât strucj, contate il supuart pai svilupadôrs."
+
 msgid "Invalid or corrupt add-on file."
 msgstr "File dal component adizionâl no valit o ruvinât."
 
@@ -1702,6 +1639,9 @@ msgstr "Creât"
 
 msgid "Downloads"
 msgstr "Discjamâts"
+
+msgid "Rating"
+msgstr "Valutazion"
 
 msgid "All My Add-ons"
 msgstr "Ducj i miei components adizionâi"
@@ -1839,6 +1779,9 @@ msgstr "Evidenziazion schede"
 msgid "The highlight color of the active tab. Implemented as a border around the tab on Firefox 89+ and a line above the tab on older Firefoxes. Manifest field:  tab_line."
 msgstr "Il colôr par evidenziâ la schede ative. Implementât come un ôr tor ator de schede su Firefox 89+ e une linie sore de schede tes versions di Firefox plui vecjis. Cjamp dal manifest:  tab_line."
 
+msgid "Add-on uploads are temporarily unavailable"
+msgstr "Il cjariament in rêt di components adizionâi pal moment nol è disponibil"
+
 msgid "Review requested."
 msgstr "Revision domandade."
 
@@ -1847,6 +1790,9 @@ msgstr "Tu scugnis indicâ altris detais par continuâ."
 
 msgid "Your old credentials were revoked and are no longer valid."
 msgstr "Lis tôs vecjis credenziâls a son stadis revocadis e no son plui validis."
+
+msgid "Keep your API keys secret and never share them with anyone, including Mozilla contributors."
+msgstr "Ten segretis lis tôs clâfs API e no sta condividilis mai cun nissun, includûts i colaboradôrs di Mozilla."
 
 msgid "New API key created"
 msgstr "Gnove clâf API creade"
@@ -2720,6 +2666,10 @@ msgid "Source files (aside from open-source third party libraries) cannot be tra
 msgstr "I files sorzint (gjavant lis librariis open source di tiercis parts) no puedin jessi convertîts midiant transpiler, concatenâts, minimizâts o gjenerâts in automatic in altre maniere."
 
 #, python-format
+msgid "The maximum file size accepted is %(max_size)s."
+msgstr "La dimension massime consintude pai files e je di %(max_size)s."
+
+#, python-format
 msgid "For more information, please read <a %(a_attrs)s>Source Code Submission</a> on Firefox Extension Workshop."
 msgstr "Par altris informazions, lei <a %(a_attrs)s>Inviament dal codiç sorzint</a> tal Laboratori estensions di Firefox."
 
@@ -2743,6 +2693,10 @@ msgstr "Cjarie version"
 
 msgid "Use the fields below to upload your add-on package. After upload, a series of automated validation tests will be run on your file."
 msgstr "Dopre i cjamps chi sot par cjariâ in rêt il pachet dal to component adizionâl. Dopo vêlu cjariât, il file al subirà une serie di provis di convalide automatizadis."
+
+#, python-format
+msgid "The maximum file size accepted is %(max_size)s. If your add-on is larger than %(max_size)s, it will fail validation."
+msgstr "La dimension massime ametude pai files e je di %(max_size)s. Se il to component adizionâl al supere %(max_size)s, nol superarà la convalide."
 
 msgid "Which applications is this version compatible with?"
 msgstr "Cun cualis aplicazions ise compatibile cheste version?"
@@ -2806,49 +2760,6 @@ msgstr "Indaûr"
 
 msgid "API Credentials"
 msgstr "Credenziâls API"
-
-#, python-format
-msgid "For detailed instructions, consult the <a href=\"%(docs_url)s\">API documentation</a>."
-msgstr "Par istruzions detaiadis, consulte la <a href=\"%(docs_url)s\">documentazion des APIs</a>."
-
-msgid "Keep your API keys secret and <strong>never share them with anyone</strong>, including Mozilla contributors."
-msgstr "Ten segretis lis tôs clâfs API e <strong>no sta condividilis mai cun nissun</strong>, includûts i colaboradôrs di Mozilla."
-
-msgid "JWT issuer"
-msgstr "Emitent JWT"
-
-msgid "JWT secret"
-msgstr "Segret JWT"
-
-#, python-format
-msgid ""
-"To make API requests, send a <a href=\"%(jwt_url)s\">JSON Web Token (JWT)</a> as the authorization header. You'll need to generate a JWT for every request as explained in the <a "
-"href=\"%(docs_url)s\">API documentation</a>."
-msgstr ""
-"Par fâ richiestis API, mande un <a href=\"%(jwt_url)s\">Token Web JSON (JWT)</a> come intestazion de autorizazion. Tu varâs di gjenerâ un JWT par ogni richieste come che al è spiegât te <a "
-"href=\"%(docs_url)s\">documentazion des APIs</a>."
-
-#, python-format
-msgid "Please click the confirm button below to generate API credentials for user <strong>%(name)s</strong>."
-msgstr "Fâs clic sul boton di conferme chi sot par gjenerâ lis credenziâls API pal utent <strong>%(name)s</strong>."
-
-msgid "A confirmation link will be sent to your email address. After confirmation you will find your API keys on this page."
-msgstr "Un colegament di conferme ti vignarà inviât ae tô direzion e-mail. Dopo de conferme tu cjatarâs lis tôs clâfs API in cheste pagjine."
-
-msgid "You don't have any API credentials."
-msgstr "No tu âs nissune credenziâl API."
-
-msgid "Revoke"
-msgstr "Revoche"
-
-msgid "Revoke and regenerate credentials"
-msgstr "Revoche e torne a gjenerâ credenziâls"
-
-msgid "Confirm and generate new credentials"
-msgstr "Conferme e gjenere gnovis credenziâls"
-
-msgid "Generate new credentials"
-msgstr "Gjenere gnovis credenziâls"
 
 #, python-format
 msgid ""
@@ -3107,13 +3018,13 @@ msgstr "Sielç une licence adate ai dirits che tu intindis concedi a tierçs sul
 msgid "Sort by:"
 msgstr "Ordene par:"
 
-#. %s is a list of HTML tags.
+#. %s is a list of markdown syntax.
 #, python-format
-msgid "Allowed HTML: %(allowed_html)s"
-msgstr "Etichetis HTML consintudis: %(allowed_html)s"
+msgid "Allowed Markdown: %(allowed_markdown)s"
+msgstr ""
 
-msgid "Some HTML supported."
-msgstr "HTML consintût in mût parziâl."
+msgid "Some Markdown supported."
+msgstr ""
 
 msgid "Remove this application"
 msgstr "Gjave cheste aplicazion"
@@ -3219,15 +3130,6 @@ msgstr "Program estensions conseadis"
 
 msgid "Contribute"
 msgstr "Fâs une donazion"
-
-msgid "Review Add-ons"
-msgstr "Revision components adizionâi"
-
-msgid "Volunteer reviewers help keep add-ons safe and reliable to use. They enjoy great perks too!"
-msgstr "I volontaris che si ocupin de revision a judin a garantî la sigurece e la afidabilitât dai components adizionâi. E a gjoldin ancje di une vore di beneficis!"
-
-msgid "Join us!"
-msgstr "Colabore cun nô!"
 
 msgid "Write Some Code"
 msgstr "Scrîf cualchi rie di codiç"
@@ -4342,10 +4244,6 @@ msgid "Double-click any word to instantly see its definition."
 msgstr "Fâs dopli clic suntune peraule par viodi intun lamp la sô definizion."
 
 #. editorial content for the discovery pane.
-msgid "Blues & Yellows"
-msgstr "Blu e zâi"
-
-#. editorial content for the discovery pane.
 #. editorial content for the primary hero shelves.
 msgid "Save batches of tabs as convenient bookmarks."
 msgstr "Salve grups di schedis come comuts segnelibris."
@@ -4406,6 +4304,10 @@ msgstr "Scolte la musiche su YouTube cence lis fastidiosis interuzions “Video 
 #. editorial content for the discovery pane.
 msgid "Change the way the web looks."
 msgstr "Cambie l’aspiet dal Web."
+
+#. editorial content for the discovery pane.
+msgid "Customize YouTube to taste. Give it a new look, new features & filter only the content you want."
+msgstr "Personalize YouTube daûr dai tiei gurcj. Dai un gnûf aspiet, gnovis funzionalitâts e mostre dome i contignûts che tu desideris."
 
 #. editorial content for the primary hero shelves.
 msgid "Some websites have difficulty playing videos on Android. Here's a fix."
@@ -4559,6 +4461,10 @@ msgstr "Volte i sîts web in Firefox — in maniere privade — cence doprâ il 
 msgid "Block time-wasting websites. Block them completely or just during time frames of your choosing."
 msgstr "Bloche i sîts web che ti fasin pierdi timp. Blochiju dal dut o nome pe dade di timp che tu decidis."
 
+#. editorial content for the primary hero shelves.
+msgid "Easily summarize emails, docs, articles, and video transcripts in English across the web — without sacrificing your privacy."
+msgstr ""
+
 #. editorial content for the secondary hero shelves.
 msgid "Extensions are like apps for Firefox."
 msgstr "Lis estensions a son come piçulis aplicazions par Firefox."
@@ -4572,16 +4478,17 @@ msgid "See all extensions"
 msgstr "Viôt dutis lis estensions"
 
 #. editorial content for the secondary hero shelves.
-msgid "Port Authority (Developer Spotlight)"
-msgstr "Port Authority (Developer Spotlight)"
-
-#. editorial content for the secondary hero shelves.
 msgid "Privacy & Security extensions"
 msgstr "Estensions pe riservatece e sigurece"
 
 #. editorial content for the secondary hero shelves.
-msgid "Fantastic tab managers"
-msgstr "Gjestôrs di schedis ecezionâi"
+#. editorial content for the homepage shelves.
+msgid "Tab managers"
+msgstr "Gjestôrs di schedis"
+
+#. editorial content for the secondary hero shelves.
+msgid "Spotlight: Adaptive Tab Bar Color"
+msgstr ""
 
 #. editorial content for the secondary hero shelves.
 msgid "See staff picks"
@@ -4650,10 +4557,6 @@ msgstr "Trasmission sociâl"
 #. editorial content for the homepage shelves.
 msgid "See more social streaming staff picks"
 msgstr "Viôt altris trasmissions sociâls sielzudis dal organic"
-
-#. editorial content for the homepage shelves.
-msgid "Tab managers"
-msgstr "Gjestôrs di schedis"
 
 #. editorial content for the homepage shelves.
 msgid "See more tab management staff picks"
@@ -4739,6 +4642,22 @@ msgstr "I miôrs gjestôrs par discjariâ"
 msgid "See more download manager staff picks"
 msgstr "Visualize altris struments pe gjestion dai discjariaments sielzûts dal organic"
 
+#. editorial content for the homepage shelves.
+msgid "Accessibility extensions"
+msgstr "Estension pal acès facilitât"
+
+#. editorial content for the homepage shelves.
+msgid "See more accessibility staff picks"
+msgstr "Viôt altris struments pal acès facilitât sielts dai nestri organic"
+
+#. editorial content for the homepage shelves.
+msgid "Extension starter pack"
+msgstr "Pachet di estensions par scomençâ"
+
+#. editorial content for the homepage shelves.
+msgid "See more starter extension staff picks"
+msgstr "Viôt altris estensions par scomençâ sieltis dal nestri organic"
+
 msgid "Unreviewed"
 msgstr "No revisionât"
 
@@ -4752,11 +4671,8 @@ msgstr "Chest file al è za stât cjariât in rêt."
 msgid "Could not parse the manifest file."
 msgstr "Impussibil analizâ il file manifest."
 
-msgid "Add-on ID is required for Firefox 47 and below."
-msgstr "Al covente un ID di component adizionâl pe compatibilitât cun Firefox 47 e precedents."
-
-msgid "Lowest supported \"strict_min_version\" is 42.0."
-msgstr "La version mancul resinte compatibile, “strict_min_version”, e je la 42.0."
+msgid "Lowest supported \"strict_min_version\" is {min_version}."
+msgstr "Il valôr minim supuartât par “strict_min_version” al è {min_version}."
 
 msgid "Unknown \"strict_min_version\" {appver} for {app}"
 msgstr "“strict_min_version” {appver} no cognossude par {app}"
@@ -4914,6 +4830,12 @@ msgstr "Valutazion di {0} su 5 stelis"
 #, python-format
 msgid "Rated %(rating)s out of 5 stars"
 msgstr "Valutazion di %(rating)s su 5 stelis"
+
+msgid "Unsupported file type, please upload a file {extensions}."
+msgstr "Gjenar di file no supuartât, cjame in rêt un file {extensions}."
+
+msgid "File too large."
+msgstr "File masse grant."
 
 #, python-format
 msgid "<dd>%(review_author)s</dd>"

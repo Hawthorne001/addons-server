@@ -56,6 +56,8 @@ to if necessary.
     :<json string|null reason: The reason for the report. The accepted values are documented in the :ref:`table below <abuse-addon-reason-parameter>`.
     :<json string|null reporter_name: The provided name of the reporter, if not authenticated.
     :<json string|null reporter_email: The provided email of the reporter, if not authenticated.
+    :<json string|null illegal_category: The type of illegal content - only required when the reason is set to ``illegal``. The accepted values are documented in this :ref:`table <abuse-report-illegal_category-parameter>`.
+    :<json string|null illegal_subcategory: The specific violation - only required when the reason is set to ``illegal``. The accepted values are documented in this :ref:`table <abuse-report-illegal_subcategory-parameter>`.
     :>json object|null reporter: The user who submitted the report, if authenticated.
     :>json int reporter.id: The id of the user who submitted the report.
     :>json string reporter.name: The name of the user who submitted the report.
@@ -86,6 +88,8 @@ to if necessary.
     :>json string|null operating_system: The client's operating system.
     :>json string|null operating_system_version: The client's operating system version.
     :>json string|null reason: The reason for the report.
+    :>json string|null illegal_category: The type of illegal content - only defined when the reason is set to ``illegal``.
+    :>json string|null illegal_subcategory: The specific violation - only defined when the reason is set to ``illegal``.
 
 .. _abuse-report_entry_point-parameter:
 
@@ -228,6 +232,102 @@ to if necessary.
                         both  Offending content is in both locations
  ===========================  ===================================================
 
+.. _abuse-report-illegal_category-parameter:
+
+ Accepted values for the ``illegal_category`` parameter:
+
+ ================================================  ================================================
+                                            Value  Description
+ ================================================  ================================================
+                                   animal_welfare  Animal welfare
+                             consumer_information  Consumer information infringements
+           data_protection_and_privacy_violations  Data protection and privacy violations
+                        illegal_or_harmful_speech  Illegal or harmful speech
+              intellectual_property_infringements  Intellectual property infringements
+ negative_effects_on_civic_discourse_or_elections  Negative effects on civic discourse or elections
+                         non_consensual_behaviour  Non-consensual behavior
+                pornography_or_sexualized_content  Pornography or sexualized content
+                             protection_of_minors  Protection of minors
+                         risk_for_public_security  Risk for public security
+                                  scams_and_fraud  Scams or fraud
+                                        self_harm  Self-harm
+                   unsafe_and_prohibited_products  Unsafe, non-compliant, or prohibited products
+                                         violence  Violence
+                                            other  Other
+ ================================================  ================================================
+
+.. _abuse-report-illegal_subcategory-parameter:
+
+ Accepted values for the ``illegal_subcategory`` parameter:
+
+ ================================================  ============================================  =============================================================================================
+ Illegal category                                  Value                                         Description
+ ================================================  ============================================  =============================================================================================
+ animal_welfare                                    other                                         Something else
+ consumer_information                              insufficient_information_on_traders           Insufficient information on traders
+ consumer_information                              noncompliance_pricing                         Non-compliance with pricing regulations
+ consumer_information                              hidden_advertisement                          Hidden advertisement or commercial communication, including by influencers
+ consumer_information                              misleading_info_goods_services                Misleading information about the characteristics of the goods and services
+ consumer_information                              misleading_info_consumer_rights               Misleading information about the consumer’s rights
+ consumer_information                              other                                         Something else
+ data_protection_and_privacy_violations            biometric_data_breach                         Biometric data breach
+ data_protection_and_privacy_violations            missing_processing_ground                     Missing processing ground for data
+ data_protection_and_privacy_violations            right_to_be_forgotten                         Right to be forgotten
+ data_protection_and_privacy_violations            data_falsification                            Data falsification
+ data_protection_and_privacy_violations            other                                         Something else
+ illegal_or_harmful_speech                         defamation                                    Defamation
+ illegal_or_harmful_speech                         discrimination                                Discrimination
+ illegal_or_harmful_speech                         hate_speech                                   Illegal incitement to violence and hatred based on protected characteristics (hate speech)
+ illegal_or_harmful_speech                         other                                         Something else
+ intellectual_property_infringements               design_infringement                           Design infringements
+ intellectual_property_infringements               geographic_indications_infringement           Geographical indications infringements
+ intellectual_property_infringements               patent_infringement                           Patent infringements
+ intellectual_property_infringements               trade_secret_infringement                     Trade secret infringements
+ intellectual_property_infringements               other                                         Something else
+ negative_effects_on_civic_discourse_or_elections  violation_eu_law                              Violation of EU law relevant to civic discourse or elections
+ negative_effects_on_civic_discourse_or_elections  violation_national_law                        Violation of national law relevant to civic discourse or elections
+ negative_effects_on_civic_discourse_or_elections  misinformation_disinformation_disinformation  Misinformation, disinformation, foreign information manipulation and interference
+ negative_effects_on_civic_discourse_or_elections  other                                         Something else
+ non_consensual_behaviour                          non_consensual_image_sharing                  Non-consensual image sharing
+ non_consensual_behaviour                          non_consensual_items_deepfake                 Non-consensual items containing deepfake or similar technology using a third party's features
+ non_consensual_behaviour                          online_bullying_intimidation                  Online bullying/intimidation
+ non_consensual_behaviour                          stalking                                      Stalking
+ non_consensual_behaviour                          other                                         Something else
+ pornography_or_sexualized_content                 adult_sexual_material                         Adult sexual material
+ pornography_or_sexualized_content                 image_based_sexual_abuse                      Image-based sexual abuse (excluding content depicting minors)
+ pornography_or_sexualized_content                 other                                         Something else
+ protection_of_minors                              age_specific_restrictions_minors              Age-specific restrictions concerning minors
+ protection_of_minors                              child_sexual_abuse_material                   Child sexual abuse material
+ protection_of_minors                              grooming_sexual_enticement_minors             Grooming/sexual enticement of minors
+ protection_of_minors                              other                                         Something else
+ risk_for_public_security                          illegal_organizations                         Illegal organizations
+ risk_for_public_security                          risk_environmental_damage                     Risk for environmental damage
+ risk_for_public_security                          risk_public_health                            Risk for public health
+ risk_for_public_security                          terrorist_content                             Terrorist content
+ risk_for_public_security                          other                                         Something else
+ scams_and_fraud                                   inauthentic_accounts                          Inauthentic accounts
+ scams_and_fraud                                   inauthentic_listings                          Inauthentic listings
+ scams_and_fraud                                   inauthentic_user_reviews                      Inauthentic user reviews
+ scams_and_fraud                                   impersonation_account_hijacking               Impersonation or account hijacking
+ scams_and_fraud                                   phishing                                      Phishing
+ scams_and_fraud                                   pyramid_schemes                               Pyramid schemes
+ scams_and_fraud                                   other                                         Something else
+ self_harm                                         content_promoting_eating_disorders            Content promoting eating disorders
+ self_harm                                         self_mutilation                               Self-mutilation
+ self_harm                                         suicide                                       Suicide
+ self_harm                                         other                                         Something else
+ unsafe_and_prohibited_products                    prohibited_products                           Prohibited or restricted products
+ unsafe_and_prohibited_products                    unsafe_products                               Unsafe or non-compliant products
+ unsafe_and_prohibited_products                    other                                         Something else
+ violence                                          coordinated_harm                              Coordinated harm
+ violence                                          gender_based_violence                         Gender-based violence
+ violence                                          human_exploitation                            Human exploitation
+ violence                                          human_trafficking                             Human trafficking
+ violence                                          incitement_violence_hatred                    General calls or incitement to violence and/or hatred
+ violence                                          other                                         Something else
+ other                                             other                                         Something else
+ ================================================  ============================================  =============================================================================================
+
 
 ------------------------------
 Submitting a user abuse report
@@ -249,6 +349,8 @@ so reports can be responded to if necessary.
     :<json string|null reason: The reason for the report. The accepted values are documented in the :ref:`table below <abuse-user-reason-parameter>`.
     :<json string|null reporter_name: The provided name of the reporter, if not authenticated.
     :<json string|null reporter_email: The provided email of the reporter, if not authenticated.
+    :<json string|null illegal_category: The type of illegal content - only required when the reason is set to ``illegal``. The accepted values are documented in this :ref:`table <abuse-report-illegal_category-parameter>`.
+    :<json string|null illegal_subcategory: The specific violation - only required when the reason is set to ``illegal``. The accepted values are documented in this :ref:`table <abuse-report-illegal_subcategory-parameter>`.
     :>json object|null reporter: The user who submitted the report, if authenticated.
     :>json int reporter.id: The id of the user who submitted the report.
     :>json string reporter.name: The name of the user who submitted the report.
@@ -263,6 +365,8 @@ so reports can be responded to if necessary.
     :>json string user.username: The username of the user reported.
     :>json string message: The body/content of the abuse report.
     :>json string|null lang: The language code of the locale used by the client for the application.
+    :>json string|null illegal_category: The type of illegal content - only defined when the reason is set to ``illegal``.
+    :>json string|null illegal_subcategory: The specific violation - only defined when the reason is set to ``illegal``.
 
 
 .. _abuse-user-reason-parameter:
@@ -298,6 +402,8 @@ so reports can be responded to if necessary.
     :<json string|null reason: The reason for the report. The accepted values are documented in the :ref:`table below <abuse-rating-reason-parameter>`.
     :<json string|null reporter_name: The provided name of the reporter, if not authenticated.
     :<json string|null reporter_email: The provided email of the reporter, if not authenticated.
+    :<json string|null illegal_category: The type of illegal content - only required when the reason is set to ``illegal``. The accepted values are documented in this :ref:`table <abuse-report-illegal_category-parameter>`.
+    :<json string|null illegal_subcategory: The specific violation - only required when the reason is set to ``illegal``. The accepted values are documented in this :ref:`table <abuse-report-illegal_subcategory-parameter>`.
     :>json object|null reporter: The user who submitted the report, if authenticated.
     :>json int reporter.id: The id of the user who submitted the report.
     :>json string reporter.name: The name of the user who submitted the report.
@@ -310,6 +416,8 @@ so reports can be responded to if necessary.
     :>json string message: The body/content of the abuse report.
     :>json string|null lang: The language code of the locale used by the client for the application.
     :>json string|null reason: The reason for the report.
+    :>json string|null illegal_category: The type of illegal content - only defined when the reason is set to ``illegal``.
+    :>json string|null illegal_subcategory: The specific violation - only defined when the reason is set to ``illegal``.
 
 
 .. _abuse-rating-reason-parameter:
@@ -345,6 +453,8 @@ so reports can be responded to if necessary.
     :<json string|null reason: The reason for the report. The accepted values are documented in the :ref:`table below <abuse-collection-reason-parameter>`.
     :<json string|null reporter_name: The provided name of the reporter, if not authenticated.
     :<json string|null reporter_email: The provided email of the reporter, if not authenticated.
+    :<json string|null illegal_category: The type of illegal content - only required when the reason is set to ``illegal``. The accepted values are documented in this :ref:`table <abuse-report-illegal_category-parameter>`.
+    :<json string|null illegal_subcategory: The specific violation - only required when the reason is set to ``illegal``. The accepted values are documented in this :ref:`table <abuse-report-illegal_subcategory-parameter>`.
     :>json object|null reporter: The user who submitted the report, if authenticated.
     :>json int reporter.id: The id of the user who submitted the report.
     :>json string reporter.name: The name of the user who submitted the report.
@@ -356,6 +466,8 @@ so reports can be responded to if necessary.
     :>json int collection.id: The id of the collection reported.
     :>json string message: The body/content of the abuse report.
     :>json string|null lang: The language code of the locale used by the client for the application.
+    :>json string|null illegal_category: The type of illegal content - only defined when the reason is set to ``illegal``.
+    :>json string|null illegal_subcategory: The specific violation - only defined when the reason is set to ``illegal``.
 
 
 .. _abuse-collection-reason-parameter:

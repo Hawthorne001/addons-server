@@ -8,11 +8,9 @@ from base64 import b64decode, b64encode
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage as storage
-from django.db import transaction
 from django.utils.encoding import force_bytes, force_str
 
 import requests
-import waffle
 from asn1crypto import cms
 from django_statsd.clients import statsd
 from requests_hawk import HawkAuth
@@ -111,18 +109,9 @@ def call_signing(file_obj):
         'keyid': conf['signer'],
         'options': {
             'id': get_id(file_obj.version.addon),
-            # "Add-on variant A params (PKCS7 SHA1 and COSE ES256) work in
-            # Fx <57, so we can switch to that without breaking backwards
-            # compatibility"
-            # https://github.com/mozilla/addons-server/issues/9308
-            # This means, the pkcs7 sha1 signature is used for backwards
-            # compatibility and cose sha256 will be used for newer
-            # Firefox versions.
-            # The relevant pref in Firefox is
-            # "security.signed_app_signatures.policy"
-            # where it's set to COSEAndPKCS7WithSHA1OrSHA256 to match
-            # these settings.
-            'pkcs7_digest': 'SHA1',
+            # Add-ons are dual-signed with PKCS7 SHA256 and COSE ES256
+            # (requires Fx 58 or greater).
+            'pkcs7_digest': 'SHA256',
             'cose_algorithms': ['ES256'],
         },
     }
@@ -172,8 +161,6 @@ def sign_file(file_obj):
 
     Otherwise proceed with signing and return the signed file.
     """
-    from olympia.git.utils import create_git_extraction_entry
-
     if not settings.ENABLE_ADDON_SIGNING:
         raise SigningError(f'Not signing file {file_obj.pk}: no active endpoint')
 
@@ -231,12 +218,6 @@ def sign_file(file_obj):
     file_obj.file.seek(0)
     file_obj.save()
     log.info(f'Signing complete for file {file_obj.pk}')
-
-    if waffle.switch_is_active('enable-uploads-commit-to-git-storage'):
-        # Schedule this version for git extraction.
-        transaction.on_commit(
-            lambda: create_git_extraction_entry(version=file_obj.version)
-        )
 
     # Remove old unsigned path if necessary.
     if old_path != file_obj.file.path:

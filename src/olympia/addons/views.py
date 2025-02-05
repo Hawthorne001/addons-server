@@ -5,6 +5,7 @@ from django.db.models import F, Max, Prefetch
 from django.db.transaction import non_atomic_requests
 from django.shortcuts import redirect
 from django.utils.cache import patch_cache_control
+from django.utils.decorators import method_decorator
 from django.utils.translation import gettext
 
 from drf_yasg.utils import swagger_auto_schema
@@ -75,7 +76,7 @@ from olympia.users.utils import (
 )
 from olympia.versions.models import Version
 
-from .decorators import addon_view_factory
+from .decorators import addon_view_factory, require_submissions_enabled
 from .indexers import AddonIndexer
 from .models import (
     Addon,
@@ -344,13 +345,20 @@ class AddonViewSet(
     def get_georestrictions(self):
         return [perm() for perm in self.georestriction_classes]
 
-    @action(detail=True)
+    @action(
+        detail=True,
+        serializer_class=AddonEulaPolicySerializer,
+        # For this action, developers use the same serializer - it only
+        # contains eula/privacy policy.
+        serializer_class_for_developers=AddonEulaPolicySerializer,
+    )
     def eula_policy(self, request, pk=None):
-        obj = self.get_object()
-        serializer = AddonEulaPolicySerializer(
-            obj, context=self.get_serializer_context()
-        )
-        return Response(serializer.data)
+        return self.retrieve(request)
+
+    @eula_policy.mapping.patch
+    def update_eula_policy(self, request, pk=None):
+        self.permission_classes = self.write_permission_classes
+        return self.update(request, partial=True)
 
     @action(detail=True)
     def delete_confirm(self, request, *args, **kwargs):
@@ -392,6 +400,7 @@ class AddonViewSet(
             self.action = 'create'
             return self.create(request, *args, **kwargs)
 
+    @method_decorator(require_submissions_enabled)
     @swagger_auto_schema(
         operation_description="""
             This endpoint allows a submission of an upload to create a new add-on
@@ -629,6 +638,7 @@ class AddonVersionViewSet(
             queryset = queryset.transform(Version.transformer_license)
         return queryset
 
+    @method_decorator(require_submissions_enabled)
     def create(self, request, *args, **kwargs):
         addon = self.get_addon_object()
         has_source = request.data.get('source')
@@ -765,6 +775,11 @@ class AddonPreviewViewSet(
     def get_queryset(self):
         return self.get_addon_object().previews.all()
 
+    @method_decorator(require_submissions_enabled)
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        return response
+
     def perform_destroy(self, instance):
         super().perform_destroy(instance)
         ActivityLog.objects.create(
@@ -858,8 +873,8 @@ class AddonPendingAuthorViewSet(CreateModelMixin, AddonAuthorViewSet):
     def get_object_for_request(self, request):
         try:
             return self.get_queryset().get(user=request.user)
-        except AddonUserPendingConfirmation.DoesNotExist:
-            raise exceptions.PermissionDenied()
+        except AddonUserPendingConfirmation.DoesNotExist as exc:
+            raise exceptions.PermissionDenied() from exc
 
     def perform_create(self, serializer):
         instance = serializer.save()
@@ -988,8 +1003,8 @@ class AddonFeaturedView(AddonSearchView):
     def get(self, request, *args, **kwargs):
         try:
             page_size = int(self.request.GET.get('page_size', api_settings.PAGE_SIZE))
-        except ValueError:
-            raise exceptions.ParseError('Invalid page_size parameter')
+        except ValueError as exc:
+            raise exceptions.ParseError('Invalid page_size parameter') from exc
 
         # Simulate pagination-like results, without actual pagination.
         queryset = self.filter_queryset(self.get_queryset()[:page_size])
@@ -1053,17 +1068,17 @@ class LanguageToolsView(ListAPIView):
         if AddonAppVersionQueryParam.query_param in self.request.GET:
             # app parameter is mandatory with appversion
             try:
-                application = AddonAppQueryParam(self.request.GET).get_value()
-            except ValueError:
+                application = AddonAppQueryParam(self.request).get_value()
+            except ValueError as exc:
                 raise exceptions.ParseError(
                     'Invalid or missing app parameter while appversion parameter is '
                     'set.'
-                )
+                ) from exc
             try:
-                value = AddonAppVersionQueryParam(self.request.GET).get_values()
+                value = AddonAppVersionQueryParam(self.request).get_values()
                 appversions = {'min': value[1], 'max': value[2]}
-            except ValueError:
-                raise exceptions.ParseError('Invalid appversion parameter.')
+            except ValueError as exc:
+                raise exceptions.ParseError('Invalid appversion parameter.') from exc
         else:
             appversions = None
             application = None
@@ -1074,19 +1089,19 @@ class LanguageToolsView(ListAPIView):
         # to filter by type if they want appversion filtering.
         if AddonTypeQueryParam.query_param in self.request.GET or appversions:
             try:
-                addon_types = tuple(AddonTypeQueryParam(self.request.GET).get_values())
-            except ValueError:
+                addon_types = tuple(AddonTypeQueryParam(self.request).get_values())
+            except ValueError as exc:
                 raise exceptions.ParseError(
                     'Invalid or missing type parameter while appversion '
                     'parameter is set.'
-                )
+                ) from exc
         else:
             addon_types = (amo.ADDON_LPAPP, amo.ADDON_DICT)
 
         # author is optional. It's a string representing the username(s) we're
         # filtering on.
         if AddonAuthorQueryParam.query_param in self.request.GET:
-            authors = AddonAuthorQueryParam(self.request.GET).get_values()
+            authors = AddonAuthorQueryParam(self.request).get_values()
         else:
             authors = None
 
@@ -1257,7 +1272,7 @@ class AddonRecommendationView(AddonSearchView):
                 guids,
                 self.ab_outcome,
                 self.fallback_reason,
-            ) = get_addon_recommendations_invalid()
+            ) = get_addon_recommendations_invalid(guid_param)
             return qs.query(query.Bool(must=[Q('terms', guid=guids)]))
         return results
 

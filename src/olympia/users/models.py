@@ -14,9 +14,10 @@ from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.signals import user_logged_in
 from django.core import validators
-from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import models
+from django.db.models import F, Value
+from django.db.models.functions import Collate
 from django.template import loader
 from django.templatetags.static import static
 from django.urls import reverse
@@ -110,7 +111,7 @@ class UserEmailBoundField(forms.boundfield.BoundField):
 
 
 class UserQuerySet(BaseQuerySet):
-    def ban_and_disable_related_content(self):
+    def ban_and_disable_related_content(self, *, skip_activity_log=False):
         """Admin method to ban multiple users and disable the content they
         produced.
 
@@ -221,7 +222,8 @@ class UserQuerySet(BaseQuerySet):
         ratings_qs.delete()
         # And then ban the users.
         for user in users:
-            activity.log_create(amo.LOG.ADMIN_USER_BANNED, user)
+            if not skip_activity_log:
+                activity.log_create(amo.LOG.ADMIN_USER_BANNED, user)
             log.info(
                 'User (%s: <%s>) is being banned.',
                 user,
@@ -235,14 +237,15 @@ class UserQuerySet(BaseQuerySet):
             delete_photo.delay(user.pk, banned=user.banned)
         return self.bulk_update(users, fields=('banned', 'deleted', 'modified'))
 
-    def unban_and_reenable_related_content(self):
+    def unban_and_reenable_related_content(self, *, skip_activity_log=False):
         """Admin method to unban users and restore their content that was
         disabled when they were banned."""
         for user in self:
             banned_user_content = BannedUserContent.objects.filter(user=user).first()
             if banned_user_content:
                 banned_user_content.restore()
-            activity.log_create(amo.LOG.ADMIN_USER_UNBAN, user)
+            if not skip_activity_log:
+                activity.log_create(amo.LOG.ADMIN_USER_UNBAN, user)
             user.deleted = False
             user.banned = None
             user.save()
@@ -731,20 +734,21 @@ class DeniedName(ModelBase):
         return self.name
 
     @classmethod
-    def blocked(cls, name):
+    def blocked(cls, value):
         """
-        Check to see if a given name is in the (cached) deny list.
+        Check to see if a given name is in the deny list.
         Return True if the name contains one of the denied terms.
 
         """
-        name = name.lower()
-        qs = cls.objects.all()
-
-        def fetch_names():
-            return [n.lower() for n in qs.values_list('name', flat=True)]
-
-        blocked_list = cache.get_or_set('denied-name:blocked', fetch_names)
-        return any(n in name for n in blocked_list)
+        return (
+            DeniedName.objects.annotate(
+                query_field=Collate(
+                    Value(value, output_field=models.CharField()), 'utf8mb4_0900_ai_ci'
+                )
+            )
+            .filter(query_field__icontains=F('name'))
+            .exists()
+        )
 
 
 RESTRICTION_TYPES = Choices(

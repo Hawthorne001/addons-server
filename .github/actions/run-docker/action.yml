@@ -2,43 +2,48 @@ name: 'Docker Run Action'
 description: 'Run a command in a new container'
 inputs:
   version:
-    description: 'The version of the image to run'
+    description: 'The version of the image to run. '
     required: true
     default: 'local'
+  digest:
+    description: 'The build digest of the image to run. Overrides version.'
+    required: true
+    default: ''
   run:
     description: 'Run command in container'
     required: true
-  services:
-    description: 'List of services to start'
+  logs:
+    description: 'Show logs'
     required: false
-    default: 'web'
-  compose_file:
-    description: 'The docker-compose file to use'
+  data_backup_skip:
+    description: 'Skip data backup'
     required: false
-    default: 'docker-compose.yml'
+    default: 'true'
+  target:
+    description: 'Docker target to run (development|production)'
+    required: false
+    default: 'production'
+  deps:
+    description: 'Which dependencies to install at runtime? (development|production)'
+    required: false
+    default: 'production'
+
 runs:
   using: 'composite'
   steps:
-    - id: id
-      shell: bash
-      run: |
-        echo "id=$(id -u)" >> $GITHUB_OUTPUT
-
     - name: Run Docker Container
       shell: bash
-      env:
-        DOCKER_VERSION: ${{ inputs.version }}
-        COMPOSE_FILE: ${{ inputs.compose_file }}
-        DOCKER_SERVICES: ${{ inputs.services }}
-        HOST_UID: ${{ steps.id.outputs.id }}
       run: |
-        if [[ -z "${{ inputs.run }}" ]]; then
-          echo "run input is required"
-          exit 1
-        fi
-
         # Start the specified services
-        make up
+        make up \
+          DOCKER_VERSION="${{ inputs.version }}" \
+          DOCKER_DIGEST="${{ inputs.digest }}" \
+          DOCKER_TARGET="${{ inputs.target }}" \
+          OLYMPIA_UID="$(id -u)" \
+          OLYMPIA_DEPS="${{ inputs.deps }}" \
+          DATA_BACKUP_SKIP="${{ inputs.data_backup_skip }}" \
+          DOCKER_WAIT="true"
+
 
         # Exec the run command in the container
         # quoted 'EOF' to prevent variable expansion
@@ -47,6 +52,6 @@ runs:
         EOF
 
     - name: Logs
+      if: ${{ inputs.logs }}
       shell: bash
-      if: failure()
       run: docker compose logs

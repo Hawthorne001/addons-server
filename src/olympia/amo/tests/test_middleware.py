@@ -258,6 +258,47 @@ class TestSetRemoteAddrFromForwardedFor(TestCase):
         self.middleware.process_request(request)
         assert request.META['REMOTE_ADDR'] == '2.3.4.2'
 
+    @override_settings(SECRET_CDN_TOKEN='foo')
+    @patch.dict(os.environ, {'DEPLOY_PLATFORM': 'gcp'})
+    def test_request_from_cdn_with_shield(self):
+        request = RequestFactory().get(
+            '/',
+            REMOTE_ADDR='1.1.1.1',
+            HTTP_X_FORWARDED_FOR='7.7.7.7, 2.3.4.2, 2.2.2.2, 1.1.1.1, 4.8.15.16',
+            HTTP_X_REQUEST_VIA_CDN='foo',
+            headers={'X-AMO-Request-Shielded': 'true'},
+        )
+        assert self.middleware.is_request_shielded(request)
+        self.middleware.process_request(request)
+        assert request.META['REMOTE_ADDR'] == '2.3.4.2'
+
+    @override_settings(SECRET_CDN_TOKEN='foo')
+    @patch.dict(os.environ, {'DEPLOY_PLATFORM': 'gcp'})
+    def test_request_from_cdn_without_shield(self):
+        # Shield header can be explicitly set to "false" instead of "true", we
+        # just ignore it in that case.
+        request = RequestFactory().get(
+            '/',
+            REMOTE_ADDR='1.1.1.1',
+            HTTP_X_FORWARDED_FOR='7.7.7.7, 2.3.4.2, 1.1.1.1, 4.8.15.16',
+            HTTP_X_REQUEST_VIA_CDN='foo',
+            headers={'X-AMO-Request-Shielded': 'false'},
+        )
+        assert not self.middleware.is_request_shielded(request)
+        self.middleware.process_request(request)
+        assert request.META['REMOTE_ADDR'] == '2.3.4.2'
+
+    @patch.dict(os.environ, {'DEPLOY_PLATFORM': 'gcp'})
+    def test_request_not_from_cdn_should_ignore_shield_header(self):
+        request = RequestFactory().get(
+            '/',
+            REMOTE_ADDR='1.1.1.1',
+            HTTP_X_FORWARDED_FOR='7.7.7.7, 2.3.4.2, 4.8.15.16',
+            HTTP_X_REQUEST_VIA_CDN='foo',
+        )
+        self.middleware.process_request(request)
+        assert request.META['REMOTE_ADDR'] == '2.3.4.2'
+
 
 class TestCacheControlMiddleware(TestCase):
     def setUp(self):
@@ -334,7 +375,7 @@ class TestCacheControlMiddleware(TestCase):
             response = CacheControlMiddleware(
                 lambda x, status=status_code: HttpResponse(status=status)
             )(request)
-            assert response['Cache-Control'] == 'max-age=180'
+            assert response['Cache-Control'] == 'max-age=360'
 
     def test_services_amo_should_cache_for_one_hour(self):
         request = self.request_factory.get('/api/v5/foo')
@@ -350,7 +391,7 @@ class TestCacheControlMiddleware(TestCase):
         response = self.client.get(reverse_ns('amo-site-status'))
         assert response.status_code == 200
         assert 'Cache-Control' in response
-        assert response['Cache-Control'] == 'max-age=180'
+        assert response['Cache-Control'] == 'max-age=360'
 
     def test_functional_should_not_cache(self):
         response = self.client.get(

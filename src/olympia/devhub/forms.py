@@ -1,6 +1,7 @@
 import os
 import tarfile
 import zipfile
+from functools import cached_property
 from urllib.parse import urlsplit
 
 from django import forms
@@ -17,6 +18,7 @@ from django.utils.translation import gettext, gettext_lazy as _, ngettext
 
 import waffle
 from django_statsd.clients import statsd
+from extended_choices import Choices
 
 from olympia import amo
 from olympia.access import acl
@@ -40,8 +42,9 @@ from olympia.addons.utils import (
 from olympia.amo.fields import HttpHttpsOnlyURLField, ReCaptchaField
 from olympia.amo.forms import AMOModelForm
 from olympia.amo.messages import DoubleSafe
-from olympia.amo.utils import slug_validator
+from olympia.amo.utils import slug_validator, verify_no_urls
 from olympia.amo.validators import OneOrMoreLetterOrNumberCharacterValidator
+from olympia.api.models import APIKey, APIKeyConfirmation
 from olympia.api.throttling import CheckThrottlesFormMixin, addon_submission_throttles
 from olympia.applications.models import AppVersion
 from olympia.constants.categories import CATEGORIES, CATEGORIES_BY_ID
@@ -107,6 +110,12 @@ class AddonFormBase(TranslationFormMixin, AMOModelForm):
 
     def clean_slug(self):
         return clean_addon_slug(self.cleaned_data['slug'], self.instance)
+
+    def clean_summary(self):
+        summary = verify_no_urls(
+            self.cleaned_data['summary'], form=self, field_name='summary'
+        )
+        return summary
 
     def clean_name(self):
         user = getattr(self.request, 'user', None)
@@ -407,13 +416,13 @@ class AuthorWaitingConfirmationForm(AuthorForm):
                     raise forms.ValidationError('')  # Caught below.
                 for validator in name_validators:
                     validator(user.display_name)
-            except forms.ValidationError:
+            except forms.ValidationError as exc:
                 raise forms.ValidationError(
                     gettext(
                         'The account needs a display name before it can be added '
                         'as an author.'
                     )
-                )
+                ) from exc
         return user
 
 
@@ -577,11 +586,20 @@ class LicenseForm(AMOModelForm):
 
         super().__init__(*args, **kwargs)
         licenses = License.objects.builtins(cc=self.cc_licenses, on_form=True)
-        cs = [(x.builtin, x) for x in licenses]
+        choices = [(x.builtin, x) for x in licenses]
         if not self.cc_licenses:
             # creative commons licenses don't have an 'other' option.
-            cs.append((License.OTHER, gettext('Other')))
-        self.fields['builtin'].choices = cs
+            choices.append((License.OTHER, gettext('Other')))
+        if (
+            self.version
+            and self.version.license
+            and self.version.license.builtin
+            and self.version.license.builtin not in amo.FORM_LICENSES
+        ):
+            # Special case where the version has an old deprecated license that
+            # was built-in but is no longer displayed on the form by default.
+            choices.append((self.version.license.builtin, self.version.license))
+        self.fields['builtin'].choices = choices
         if self.version and self.version.channel == amo.CHANNEL_UNLISTED:
             self.fields['builtin'].required = False
 
@@ -692,12 +710,9 @@ class PolicyForm(TranslationFormMixin, AMOModelForm):
 
     def save(self, commit=True):
         ob = super().save(commit)
-        for k, field in (('has_eula', 'eula'), ('has_priv', 'privacy_policy')):
-            if not self.cleaned_data[k]:
+        for has, field in (('has_eula', 'eula'), ('has_priv', 'privacy_policy')):
+            if not self.cleaned_data[has]:
                 delete_translation(self.instance, field)
-
-        if 'privacy_policy' in self.changed_data:
-            ActivityLog.objects.create(amo.LOG.CHANGE_POLICY, self.addon, self.instance)
 
         return ob
 
@@ -735,8 +750,10 @@ class WithSourceMixin:
                     raise forms.ValidationError(
                         self.get_invalid_source_file_type_message()
                     )
-            except (zipfile.BadZipFile, tarfile.ReadError, OSError, EOFError):
-                raise forms.ValidationError(gettext('Invalid or broken archive.'))
+            except (zipfile.BadZipFile, tarfile.ReadError, OSError, EOFError) as exc:
+                raise forms.ValidationError(
+                    gettext('Invalid or broken archive.')
+                ) from exc
         return source
 
 
@@ -1042,11 +1059,17 @@ class NewUploadForm(CheckThrottlesFormMixin, forms.Form):
         'Please try again after some time.'
     )
     throttle_classes = addon_submission_throttles
+    recaptcha = ReCaptchaField(label='')
 
     def __init__(self, *args, **kw):
         self.request = kw.pop('request')
         self.addon = kw.pop('addon', None)
+        self.include_recaptcha = kw.pop('include_recaptcha', False)
         super().__init__(*args, **kw)
+
+        recaptcha_enabled = waffle.switch_is_active('developer-submit-addon-captcha')
+        if not recaptcha_enabled or not self.include_recaptcha:
+            del self.fields['recaptcha']
 
         # Preselect compatible apps based on the current version
         if self.addon and self.addon.current_version:
@@ -1123,7 +1146,12 @@ class NewUploadForm(CheckThrottlesFormMixin, forms.Form):
 
 
 class SourceForm(WithSourceMixin, AMOModelForm):
-    source = forms.FileField(required=False, widget=SourceFileInput)
+    source = forms.FileField(
+        required=False,
+        widget=SourceFileInput(
+            attrs={'data-max-upload-size': settings.MAX_UPLOAD_SIZE}
+        ),
+    )
     has_source = forms.ChoiceField(
         choices=(('yes', _('Yes')), ('no', _('No'))), required=True, widget=RadioSelect
     )
@@ -1399,3 +1427,154 @@ class AgreementForm(forms.Form):
         if not checker.is_submission_allowed(check_dev_agreement=False):
             raise forms.ValidationError(checker.get_error_message())
         return self.cleaned_data
+
+
+class APIKeyForm(forms.Form):
+    ACTION_CHOICES = Choices(
+        ('confirm', 'confirm', _('Confirm email address')),
+        ('generate', 'generate', _('Generate new credentials')),
+        ('regenerate', 'regenerate', _('Revoke and regenerate credentials')),
+        ('revoke', 'revoke', _('Revoke')),
+    )
+    REQUIRES_CREDENTIALS = (ACTION_CHOICES.revoke, ACTION_CHOICES.regenerate)
+    REQUIRES_CONFIRMATION = (ACTION_CHOICES.generate, ACTION_CHOICES.regenerate)
+
+    @cached_property
+    def credentials(self):
+        try:
+            return APIKey.get_jwt_key(user=self.request.user)
+        except APIKey.DoesNotExist:
+            return None
+
+    @cached_property
+    def confirmation(self):
+        try:
+            return APIKeyConfirmation.objects.get(user=self.request.user)
+        except APIKeyConfirmation.DoesNotExist:
+            return None
+
+    def validate_confirmation_token(self, value):
+        if (
+            not self.confirmation.confirmed_once
+            and not self.confirmation.is_token_valid(value)
+        ):
+            raise forms.ValidationError('Invalid token')
+
+    def __init__(self, *args, **kwargs):
+        self.request = kwargs.pop('request', None)
+        super().__init__(*args, **kwargs)
+        self.action = self.data.get('action', None)
+        self.available_actions = []
+
+        # Available actions determine what you can do currently
+        has_credentials = self.credentials is not None
+        has_confirmation = self.confirmation is not None
+
+        # User has credentials, show them and offer to revoke/regenerate
+        if has_credentials:
+            self.fields['credentials_key'] = forms.CharField(
+                label=_('JWT issuer'),
+                max_length=255,
+                disabled=True,
+                widget=forms.TextInput(attrs={'readonly': True}),
+                required=True,
+                initial=self.credentials.key,
+                help_text=_(
+                    'To make API requests, send a <a href="{jwt_url}">'
+                    'JSON Web Token (JWT)</a> as the authorization header. '
+                    "You'll need to generate a JWT for every request as explained in "
+                    'the <a href="{docs_url}">API documentation</a>.'
+                ).format(
+                    jwt_url='https://self-issued.info/docs/draft-ietf-oauth-json-web-token.html',
+                    docs_url='https://addons-server.readthedocs.io/en/latest/topics/api/auth.html',
+                ),
+            )
+            self.fields['credentials_secret'] = forms.CharField(
+                label=_('JWT secret'),
+                max_length=255,
+                disabled=True,
+                widget=forms.TextInput(attrs={'readonly': True}),
+                required=True,
+                initial=self.credentials.secret,
+            )
+            self.available_actions.append(self.ACTION_CHOICES.revoke)
+
+            if has_confirmation and self.confirmation.confirmed_once:
+                self.available_actions.append(self.ACTION_CHOICES.regenerate)
+
+        elif has_confirmation:
+            get_token_param = self.request.GET.get('token')
+
+            if (
+                self.confirmation.confirmed_once
+                or get_token_param is not None
+                or self.data.get('confirmation_token') is not None
+            ):
+                help_text = _(
+                    'Please click the confirm button below to generate '
+                    'API credentials for user <strong>{name}</strong>.'
+                ).format(name=self.request.user.name)
+                self.available_actions.append(self.ACTION_CHOICES.generate)
+            else:
+                help_text = _(
+                    'A confirmation link will be sent to your email address. '
+                    'After confirmation you will find your API keys on this page.'
+                )
+
+            self.fields['confirmation_token'] = forms.CharField(
+                label='',
+                max_length=20,
+                widget=forms.HiddenInput(),
+                initial=get_token_param,
+                required=False,
+                help_text=help_text,
+                validators=[self.validate_confirmation_token],
+            )
+
+        else:
+            if waffle.switch_is_active('developer-submit-addon-captcha'):
+                self.fields['recaptcha'] = ReCaptchaField(
+                    label='', help_text=_("You don't have any API credentials.")
+                )
+            self.available_actions.append(self.ACTION_CHOICES.confirm)
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        # The actions available depend on the current state
+        # and are determined during initialization
+        if self.action not in self.available_actions:
+            raise forms.ValidationError(
+                _('Something went wrong, please contact developer support.')
+            )
+
+        return cleaned_data
+
+    def save(self):
+        credentials_revoked = False
+        credentials_generated = False
+        confirmation_created = False
+
+        # User is revoking or regenerating credentials, revoke existing credentials
+        if self.action in self.REQUIRES_CREDENTIALS:
+            self.credentials.update(is_active=None)
+            credentials_revoked = True
+
+        # user is trying to generate or regenerate credentials, create new credentials
+        if self.action in self.REQUIRES_CONFIRMATION:
+            self.confirmation.update(confirmed_once=True)
+            self.credentials = APIKey.new_jwt_credentials(self.request.user)
+            credentials_generated = True
+
+        # user has no credentials or confirmation, create a confirmation
+        if self.action == self.ACTION_CHOICES.confirm:
+            self.confirmation = APIKeyConfirmation.objects.create(
+                user=self.request.user, token=APIKeyConfirmation.generate_token()
+            )
+            confirmation_created = True
+
+        return {
+            'credentials_revoked': credentials_revoked,
+            'credentials_generated': credentials_generated,
+            'confirmation_created': confirmation_created,
+        }

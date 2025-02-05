@@ -39,6 +39,11 @@ ALLOWED_HOSTS = [
 # This variable should only be set to `True` for local env and internal hosts.
 INTERNAL_ROUTES_ALLOWED = env('INTERNAL_ROUTES_ALLOWED', default=False)
 
+if os.environ.get('ADDONS_SERVER_COMPONENT') == 'amo-internal-web':
+    # Allow (much) higher number of fields to be submitted to internal web, it
+    # serves the admin which can potentially have huge forms for the blocklist.
+    DATA_UPLOAD_MAX_NUMBER_FIELDS = 100000
+
 try:
     # If we have a build id (it should be generated when building the image),
     # we'll grab it here and add it to our CACHE_KEY_PREFIX. This will let us
@@ -57,7 +62,23 @@ def path(*folders):
     return os.path.join(ROOT, *folders)
 
 
-DEBUG = False
+DEBUG = env('DEBUG', default=False)
+
+# Do NOT provide a default value, this should be explicitly
+# set during the docker image build. If it is not set,
+# we want to raise an error.
+DOCKER_TARGET = env('DOCKER_TARGET')
+
+DEV_MODE = False
+
+# Host info that is hard coded for production images.
+HOST_UID = None
+
+# Used to determine if django should serve static files.
+# For local deployments we want nginx to proxy static file requests to the
+# uwsgi server and not try to serve them locally.
+# In production, nginx serves these files from a CDN.
+SERVE_STATIC_FILES = False
 
 DEBUG_TOOLBAR_CONFIG = {
     # Deactivate django debug toolbar by default.
@@ -76,15 +97,15 @@ SILENCED_SYSTEM_CHECKS = (
 # LESS CSS OPTIONS (Debug only).
 LESS_PREPROCESS = True  # Compile LESS with Node, rather than client-side JS?
 LESS_LIVE_REFRESH = False  # Refresh the CSS on save?
-LESS_BIN = env('LESS_BIN', default='/deps/node_modules/less/bin/lessc')
+LESS_BIN = env('LESS_BIN', default=path('node_modules/less/bin/lessc'))
 
 # Path to cleancss (our CSS minifier).
 CLEANCSS_BIN = env(
-    'CLEANCSS_BIN', default='/deps/node_modules/clean-css-cli/bin/cleancss'
+    'CLEANCSS_BIN', default=path('node_modules/clean-css-cli/bin/cleancss')
 )
 
 # Path to our JS minifier.
-JS_MINIFIER_BIN = env('JS_MINIFIER_BIN', default='/deps/node_modules/terser/bin/terser')
+JS_MINIFIER_BIN = env('JS_MINIFIER_BIN', default=path('node_modules/terser/bin/terser'))
 
 # rsvg-convert is used to save our svg static theme previews to png
 RSVG_CONVERT_BIN = env('RSVG_CONVERT_BIN', default='rsvg-convert')
@@ -94,7 +115,7 @@ PNGCRUSH_BIN = env('PNGCRUSH_BIN', default='pngcrush')
 
 # Path to our addons-linter binary
 ADDONS_LINTER_BIN = env(
-    'ADDONS_LINTER_BIN', default='/deps/node_modules/addons-linter/bin/addons-linter'
+    'ADDONS_LINTER_BIN', default=path('node_modules/addons-linter/bin/addons-linter')
 )
 # --enable-background-service-worker linter flag value
 ADDONS_LINTER_ENABLE_SERVICE_WORKER = False
@@ -117,6 +138,9 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     'x-country-code',
 ]
 
+DB_ENGINE = 'olympia.core.db.mysql'
+DB_CHARSET = 'utf8mb4'
+
 
 def get_db_config(environ_var, atomic_requests=True):
     values = env.db(var=environ_var, default='mysql://root:@127.0.0.1/olympia')
@@ -129,9 +153,9 @@ def get_db_config(environ_var, atomic_requests=True):
             'ATOMIC_REQUESTS': atomic_requests,
             # Pool our database connections up for 300 seconds
             'CONN_MAX_AGE': 300,
-            'ENGINE': 'olympia.core.db.mysql',
+            'ENGINE': DB_ENGINE,
             'OPTIONS': {
-                'charset': 'utf8mb4',
+                'charset': DB_CHARSET,
                 'sql_mode': 'STRICT_ALL_TABLES',
                 'isolation_level': 'read committed',
             },
@@ -150,6 +174,11 @@ DATABASE_ROUTERS = ('multidb.PinningReplicaRouter',)
 
 # Put the aliases for your slave databases in this list.
 REPLICA_DATABASES = []
+
+LOCAL_ADMIN_EMAIL = 'local_admin@mozilla.com'
+LOCAL_ADMIN_USERNAME = 'local_admin'
+
+DJANGO_EXTENSIONS_RESET_DB_MYSQL_ENGINES = [DB_ENGINE]
 
 # Local time zone for this installation. Choices can be found here:
 # http://en.wikipedia.org/wiki/List_of_tz_zones_by_name
@@ -172,6 +201,7 @@ LANGUAGES_BIDI = ('ar', 'fa', 'he', 'ur')
 # Explicit conversion of a shorter language code into a more specific one.
 SHORTER_LANGUAGES = {
     'en': 'en-US',
+    'es': 'es-ES',
     'ga': 'ga-IE',
     'pt': 'pt-PT',
     'sv': 'sv-SE',
@@ -223,10 +253,6 @@ SERVICES_DOMAIN = 'services.%s' % DOMAIN
 #   Example: https://services.addons.mozilla.org
 SERVICES_URL = 'http://%s' % SERVICES_DOMAIN
 
-# URL of the code-manager site, see:
-# https://github.com/mozilla/addons-code-manager
-CODE_MANAGER_URL = f'https://code.{DOMAIN}'
-
 # Static and media URL for prod are hardcoded here to allow them to be set in
 # the base CSP shared by all envs.
 PROD_STATIC_URL = 'https://addons.mozilla.org/static-server/'
@@ -264,6 +290,7 @@ SUPPORTED_NONAPPS = (
     'abuse',
     'admin',
     'apps',
+    'activity',
     'contribute.json',
     'developer_agreement',
     'developers',
@@ -289,6 +316,7 @@ DEFAULT_APP = 'firefox'
 # This needs to be kept in sync with addons-frontend's validLocaleUrlExceptions
 # https://github.com/mozilla/addons-frontend/blob/master/config/default-amo.js
 SUPPORTED_NONLOCALES = (
+    'activity',
     'contribute.json',
     'google1f3e37b7351799a5.html',
     'google231a41e803e464e9.html',
@@ -348,6 +376,11 @@ TEMPLATES = [
             path('src/olympia/templates'),
         ),
         'OPTIONS': {
+            'globals': {
+                'vite_hmr_client': (
+                    'django_vite.templatetags.django_vite.vite_hmr_client'
+                ),
+            },
             # http://jinja.pocoo.org/docs/dev/extensions/#newstyle-gettext
             'newstyle_gettext': True,
             # Match our regular .html and .txt file endings except
@@ -534,6 +567,8 @@ INSTALLED_APPS = (
     'rangefilter',
     'django_recaptcha',
     'drf_yasg',
+    'django_node_assets',
+    'django_vite',
     # Django contrib apps
     'django.contrib.admin',
     'django.contrib.auth',
@@ -608,7 +643,7 @@ MINIFY_BUNDLES = {
             'css/devhub/buttons.less',
             'css/devhub/in-app-config.less',
             'css/devhub/static-theme.less',
-            'css/node_lib/jquery.minicolors.css',
+            '@claviska/jquery-minicolors/jquery.minicolors.css',
             'css/impala/devhub-api.less',
             'css/devhub/dashboard.less',
         ),
@@ -624,13 +659,12 @@ MINIFY_BUNDLES = {
     },
     'js': {
         # JS files common to the entire site, apart from dev-landing.
-        # js/node_lib/* files are copied in Makefile-docker - keep both lists in sync
         'common': (
-            'js/node_lib/underscore.js',
+            'underscore/underscore.js',
             'js/zamboni/init.js',
             'js/zamboni/capabilities.js',
             'js/lib/format.js',
-            'js/node_lib/jquery.cookie.js',
+            'jquery.cookie/jquery.cookie.js',
             'js/zamboni/storage.js',
             'js/common/keys.js',
             'js/zamboni/helpers.js',
@@ -643,10 +677,9 @@ MINIFY_BUNDLES = {
             'js/common/lang_switcher.js',
         ),
         # Things to be loaded at the top of the page
-        'preload': (
-            'js/node_lib/jquery.js',
-            'js/node_lib/jquery.browser.js',
-            'js/zamboni/analytics.js',
+        'jquery_base': (
+            'jquery/dist/jquery.js',
+            'jquery.browser/dist/jquery.browser.js',
         ),
         'zamboni/devhub': (
             'js/lib/truncate.js',
@@ -656,16 +689,16 @@ MINIFY_BUNDLES = {
             'js/common/upload-image.js',
             'js/zamboni/devhub.js',
             'js/zamboni/validator.js',
-            'js/node_lib/jquery.timeago.js',
+            'timeago/jquery.timeago.js',
             'js/zamboni/static_theme.js',
-            'js/node_lib/jquery.minicolors.js',
-            'js/node_lib/jszip.js',
+            '@claviska/jquery-minicolors/jquery.minicolors.js',
+            'jszip/dist/jszip.js',
             # jQuery UI for sortable
-            'js/node_lib/ui/data.js',
-            'js/node_lib/ui/scroll-parent.js',
-            'js/node_lib/ui/widget.js',
-            'js/node_lib/ui/mouse.js',
-            'js/node_lib/ui/sortable.js',
+            'jquery-ui/ui/data.js',
+            'jquery-ui/ui/scroll-parent.js',
+            'jquery-ui/ui/widget.js',
+            'jquery-ui/ui/widgets/mouse.js',
+            'jquery-ui/ui/widgets/sortable.js',
         ),
         'devhub/new-landing/js': (
             # Note that new-landing (devhub/index.html) doesn't include
@@ -694,10 +727,10 @@ MINIFY_BUNDLES = {
             'js/stats/table.js',
             'js/stats/stats.js',
         ),
-        # This is included when DEBUG is True.  Bundle in <head>.
+        # This is included when DEV_MODE is True.  Bundle in <head>.
         'debug': (
             'js/debug/less_setup.js',
-            'js/node_lib/less.js',
+            'less/dist/less.js',
             'js/debug/less_live.js',
         ),
     },
@@ -746,8 +779,8 @@ LOGOUT_REDIRECT_URL = '/'
 MAX_GEN_USERNAME_TRIES = 50
 
 # Email settings
-ADDONS_EMAIL = 'Mozilla Add-ons <nobody@mozilla.org>'
-DEFAULT_FROM_EMAIL = ADDONS_EMAIL
+ADDONS_EMAIL = 'nobody@mozilla.org'
+DEFAULT_FROM_EMAIL = f'Mozilla Add-ons <{ADDONS_EMAIL}>'
 
 # Email goes to the console by default.  s/console/smtp/ for regular delivery
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
@@ -832,6 +865,9 @@ CELERY_TASK_ROUTES = {
     # Adhoc
     # A queue to be used for one-off tasks that could be resource intensive or
     # tasks we want completely separate from the rest.
+    'olympia.addons.tasks.delete_erroneously_added_overgrowth_needshumanreview': {
+        'queue': 'adhoc'
+    },
     'olympia.addons.tasks.find_inconsistencies_between_es_and_db': {'queue': 'adhoc'},
     'olympia.search.management.commands.reindex.create_new_index': {'queue': 'adhoc'},
     'olympia.search.management.commands.reindex.delete_indexes': {'queue': 'adhoc'},
@@ -842,14 +878,16 @@ CELERY_TASK_ROUTES = {
     'olympia.versions.tasks.delete_list_theme_previews': {'queue': 'adhoc'},
     'olympia.versions.tasks.hard_delete_versions': {'queue': 'adhoc'},
     'olympia.activity.tasks.create_ratinglog': {'queue': 'adhoc'},
+    'olympia.files.tasks.backfill_file_manifest': {'queue': 'adhoc'},
     'olympia.files.tasks.extract_host_permissions': {'queue': 'adhoc'},
     'olympia.lib.crypto.tasks.bump_and_resign_addons': {'queue': 'adhoc'},
     # Misc AMO tasks.
     'olympia.blocklist.tasks.monitor_remote_settings': {'queue': 'amo'},
     'olympia.abuse.tasks.appeal_to_cinder': {'queue': 'amo'},
+    'olympia.abuse.tasks.handle_escalate_action': {'queue': 'amo'},
+    'olympia.abuse.tasks.handle_forward_to_legal_action': {'queue': 'amo'},
     'olympia.abuse.tasks.report_to_cinder': {'queue': 'amo'},
-    'olympia.abuse.tasks.notify_addon_decision_to_cinder': {'queue': 'amo'},
-    'olympia.abuse.tasks.resolve_job_in_cinder': {'queue': 'amo'},
+    'olympia.abuse.tasks.report_decision_to_cinder_and_notify': {'queue': 'amo'},
     'olympia.abuse.tasks.sync_cinder_policies': {'queue': 'amo'},
     'olympia.accounts.tasks.clear_sessions_event': {'queue': 'amo'},
     'olympia.accounts.tasks.delete_user_event': {'queue': 'amo'},
@@ -870,10 +908,6 @@ CELERY_TASK_ROUTES = {
     'olympia.bandwagon.tasks.collection_meta': {'queue': 'amo'},
     'olympia.blocklist.tasks.cleanup_old_files': {'queue': 'amo'},
     'olympia.devhub.tasks.recreate_previews': {'queue': 'amo'},
-    'olympia.git.tasks.continue_git_extraction': {'queue': 'amo'},
-    'olympia.git.tasks.extract_versions_to_git': {'queue': 'amo'},
-    'olympia.git.tasks.on_extraction_error': {'queue': 'amo'},
-    'olympia.git.tasks.remove_git_extraction_entry': {'queue': 'amo'},
     'olympia.ratings.tasks.addon_bayesian_rating': {'queue': 'amo'},
     'olympia.ratings.tasks.addon_rating_aggregates': {'queue': 'amo'},
     'olympia.ratings.tasks.update_denorm': {'queue': 'amo'},
@@ -934,6 +968,7 @@ CELERY_TASK_ROUTES = {
     'olympia.scanners.tasks.run_yara_query_rule': {'queue': 'zadmin'},
     'olympia.scanners.tasks.run_yara_query_rule_on_versions_chunk': {'queue': 'zadmin'},
     'olympia.zadmin.tasks.celery_error': {'queue': 'zadmin'},
+    'olympia.blocklist.tasks.upload_mlbf_to_remote_settings_task': {'queue': 'zadmin'},
 }
 
 # See PEP 391 for formatting help.
@@ -1013,12 +1048,6 @@ LOGGING = {
             'propagate': False,
         },
         'parso': {'handlers': ['null'], 'level': logging.INFO, 'propagate': False},
-        'post_request_task': {
-            'handlers': ['mozlog'],
-            # Ignore INFO or DEBUG from post-request-task, it logs too much.
-            'level': logging.WARNING,
-            'propagate': False,
-        },
         'sentry_sdk': {
             'handlers': ['mozlog'],
             'level': logging.WARNING,
@@ -1039,8 +1068,12 @@ LOGGING = {
 }
 
 # CSP Settings
-# See https://github.com/mozilla/bedrock/issues/11768
-ANALYTICS_HOST = 'https://*.google-analytics.com'
+# https://github.com/mozilla/addons/issues/14799#issuecomment-2127359422
+# These match Google's recommendations for CSP with GA4.
+GOOGLE_TAGMANAGER_HOST = 'https://*.googletagmanager.com'
+GOOGLE_ANALYTICS_HOST = 'https://*.google-analytics.com'
+GOOGLE_ADDITIONAL_ANALYTICS_HOST = 'https://*.analytics.google.com'
+
 
 CSP_REPORT_URI = '/__cspreport__'
 CSP_REPORT_ONLY = False
@@ -1051,7 +1084,9 @@ CSP_EXCLUDE_URL_PREFIXES = ()
 CSP_DEFAULT_SRC = ("'none'",)
 CSP_CONNECT_SRC = (
     "'self'",
-    ANALYTICS_HOST,
+    GOOGLE_ANALYTICS_HOST,
+    GOOGLE_ADDITIONAL_ANALYTICS_HOST,
+    GOOGLE_TAGMANAGER_HOST,
 )
 CSP_FORM_ACTION = ("'self'",)
 CSP_FONT_SRC = (
@@ -1066,13 +1101,15 @@ CSP_IMG_SRC = (
     'data:',  # Needed for theme wizard.
     PROD_STATIC_URL,
     PROD_MEDIA_URL,
+    GOOGLE_ANALYTICS_HOST,
+    GOOGLE_TAGMANAGER_HOST,
 )
 CSP_MEDIA_SRC = ('https://videos.cdn.mozilla.net',)
 CSP_OBJECT_SRC = ("'none'",)
 
 CSP_SCRIPT_SRC = (
-    'https://www.google-analytics.com/analytics.js',
-    'https://www.googletagmanager.com/gtag/js',
+    GOOGLE_ANALYTICS_HOST,
+    GOOGLE_TAGMANAGER_HOST,
     'https://www.recaptcha.net/recaptcha/',
     'https://www.gstatic.com/recaptcha/',
     'https://www.gstatic.cn/recaptcha/',
@@ -1122,7 +1159,12 @@ MAX_IMAGE_UPLOAD_SIZE = 4 * 1024 * 1024
 MAX_ICON_UPLOAD_SIZE = MAX_IMAGE_UPLOAD_SIZE
 MAX_PHOTO_UPLOAD_SIZE = MAX_IMAGE_UPLOAD_SIZE
 MAX_STATICTHEME_SIZE = 7 * 1024 * 1024
-MAX_ZIP_UNCOMPRESSED_SIZE = 200 * 1024 * 1024
+MAX_ZIP_UNCOMPRESSED_SIZE = 250 * 1024 * 1024
+# Not a Django setting -- needs to be implemented by relevant forms
+# See SourceForm, _submit_upload(), validate_review_attachment(), etc. Since it
+# is displayed to users with filesizeformat it should be using powers of 1000
+# to be displayed correctly.
+MAX_UPLOAD_SIZE = 200 * 1000 * 1000
 
 # File uploads should have -rw-r--r-- permissions in order to be served by
 # nginx later one. The 0o prefix is intentional, this is an octal value.
@@ -1285,8 +1327,30 @@ HIVE_CONNECTION = {
 STATIC_ROOT = path('site-static')
 STATIC_URL = '/static/'
 
-STATICFILES_DIRS = (path('static'),)
-STATICFILES_STORAGE = 'olympia.lib.storage.ManifestStaticFilesStorageNotMaps'
+STATICFILES_FINDERS = (
+    'django.contrib.staticfiles.finders.FileSystemFinder',
+    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+    'django_node_assets.finders.NodeModulesFinder',
+)
+
+NODE_MODULES_ROOT = path('node_modules')
+NODE_PACKAGE_JSON = path('package.json')
+NODE_PACKAGE_MANAGER_INSTALL_OPTIONS = ['--dry-run']
+
+# The manifest file is created in static-build but copied into the static root
+# so we should expect to find it at /<static_root/<static_build>/manifest.json
+STATIC_BUILD_PATH = path('static-build')
+# This value should be kept in sync with vite.config.js
+# where the manifest will be written to
+STATIC_BUILD_MANIFEST_PATH = path(STATIC_BUILD_PATH, 'manifest.json')
+STATIC_FILES_PATH = path('static')
+
+STATICFILES_DIRS = (
+    STATIC_FILES_PATH,
+    STATIC_BUILD_PATH,
+)
+
+STATICFILES_STORAGE = 'olympia.lib.storage.OlympiaStaticFilesStorage'
 
 # Path related settings. In dev/stage/prod `NETAPP_STORAGE_ROOT` environment
 # variable will be set and point to our NFS/EFS storage
@@ -1294,7 +1358,6 @@ STATICFILES_STORAGE = 'olympia.lib.storage.ManifestStaticFilesStorageNotMaps'
 # or changed.
 STORAGE_ROOT = env('NETAPP_STORAGE_ROOT', default=path('storage'))
 ADDONS_PATH = os.path.join(STORAGE_ROOT, 'files')
-GIT_FILE_STORAGE_PATH = os.path.join(STORAGE_ROOT, 'git-storage')
 MLBF_STORAGE_PATH = os.path.join(STORAGE_ROOT, 'mlbf')
 SITEMAP_STORAGE_PATH = os.path.join(STORAGE_ROOT, 'sitemaps')
 
@@ -1319,7 +1382,7 @@ MAX_APIKEY_JWT_AUTH_TOKEN_LIFETIME = 5 * 60
 API_KEY_CONFIRMATION_DELAY = None
 
 # Default cache duration for the API, in seconds.
-API_CACHE_DURATION = 3 * 60
+API_CACHE_DURATION = 6 * 60
 
 # Default cache duration for the API on services.a.m.o., in seconds.
 API_CACHE_DURATION_SERVICES = 60 * 60
@@ -1361,6 +1424,7 @@ DRF_API_GATES = {
         'del-version-license-slug',
         'del-preview-position',
         'categories-application',
+        'promoted-verified-sponsored',
     ),
     'v4': (
         'l10n_flat_input_output',
@@ -1376,12 +1440,17 @@ DRF_API_GATES = {
         'del-version-license-slug',
         'del-preview-position',
         'categories-application',
+        'promoted-verified-sponsored',
+        'block-min-max-versions-shim',
+        'block-versions-list-shim',
     ),
     'v5': (
         'addons-search-_score-field',
         'ratings-can_reply',
         'ratings-score-filter',
         'addon-submission-api',
+        'promoted-verified-sponsored',
+        'block-versions-list-shim',
     ),
 }
 
@@ -1451,17 +1520,18 @@ VERIFY_FXA_ACCESS_TOKEN = True
 # List all jobs that should be callable with cron here.
 # syntax is: job_and_method_name: full.package.path
 CRON_JOBS = {
-    'update_addon_average_daily_users': 'olympia.addons.cron',
-    'update_addon_weekly_downloads': 'olympia.addons.cron',
     'addon_last_updated': 'olympia.addons.cron',
-    'update_addon_hotness': 'olympia.addons.cron',
     'gc': 'olympia.amo.cron',
-    'write_sitemaps': 'olympia.amo.cron',
     'process_blocklistsubmissions': 'olympia.blocklist.cron',
-    'upload_mlbf_to_remote_settings': 'olympia.blocklist.cron',
+    'record_reviewer_queues_counts': 'olympia.reviewers.cron',
+    'sync_suppressed_emails_cron': 'olympia.users.cron',
+    'update_addon_average_daily_users': 'olympia.addons.cron',
+    'update_addon_hotness': 'olympia.addons.cron',
+    'update_addon_weekly_downloads': 'olympia.addons.cron',
     'update_blog_posts': 'olympia.devhub.cron',
     'update_user_ratings': 'olympia.users.cron',
-    'sync_suppressed_emails_cron': 'olympia.users.cron',
+    'upload_mlbf_to_remote_settings': 'olympia.blocklist.cron',
+    'write_sitemaps': 'olympia.amo.cron',
 }
 
 RECOMMENDATION_ENGINE_URL = env(
@@ -1505,14 +1575,15 @@ CUSTOMS_GIT_REPOSITORY = env('CUSTOMS_GIT_REPOSITORY', default=None)
 DUAL_SIGNOFF_AVERAGE_DAILY_USERS_THRESHOLD = 100_000
 REMOTE_SETTINGS_API_URL = 'https://remote-settings-dev.allizom.org/v1/'
 REMOTE_SETTINGS_WRITER_URL = 'https://remote-settings-dev.allizom.org/v1/'
-REMOTE_SETTINGS_WRITER_BUCKET = 'blocklists'
+REMOTE_SETTINGS_WRITER_BUCKET = 'staging'
 REMOTE_SETTINGS_CHECK_TIMEOUT_SECONDS = 10
 
-# The remote settings test server needs accounts and setting up before using.
-REMOTE_SETTINGS_IS_TEST_SERVER = False
-BLOCKLIST_REMOTE_SETTINGS_USERNAME = env('BLOCKLIST_KINTO_USERNAME', default='amo_dev')
+# Each env is expected to overwrite those credentials.
+BLOCKLIST_REMOTE_SETTINGS_USERNAME = env(
+    'BLOCKLIST_KINTO_USERNAME', default='amo_remote_settings_username'
+)
 BLOCKLIST_REMOTE_SETTINGS_PASSWORD = env(
-    'BLOCKLIST_KINTO_PASSWORD', default='amo_dev_password'
+    'BLOCKLIST_KINTO_PASSWORD', default='amo_remote_settings_password'
 )
 
 # The path to the current google service account configuration for BigQuery.
@@ -1553,3 +1624,15 @@ CINDER_QUEUE_PREFIX = 'amo-dev-'
 SOCKET_LABS_HOST = env('SOCKET_LABS_HOST', default='https://api.socketlabs.com/v2/')
 SOCKET_LABS_TOKEN = env('SOCKET_LABS_TOKEN', default=None)
 SOCKET_LABS_SERVER_ID = env('SOCKET_LABS_SERVER_ID', default=None)
+
+# Set to True in settings_test.py
+# This controls the behavior of migrations
+TESTING_ENV = False
+
+ENABLE_ADMIN_MLBF_UPLOAD = False
+
+DJANGO_VITE = {
+    'default': {
+        'manifest_path': STATIC_BUILD_MANIFEST_PATH,
+    }
+}

@@ -1,6 +1,7 @@
 import hashlib
 import mimetypes
 import os
+from datetime import date
 
 from django.core.files.storage import default_storage as storage
 from django.db import transaction
@@ -535,20 +536,37 @@ def flag_high_hotness_according_to_review_tier():
         # Need a hotness threshold to be set for the tier.
         growth_threshold_before_flagging__isnull=False,
     )
-    tier_filters = Q()
+    # Build a single queryset with all add-ons we want to flag for each tier.
+    base_qs = UsageTier.get_base_addons()
+    hotness_per_tier_filters = Q()
     for usage_tier in usage_tiers:
-        tier_filters |= Q(
-            average_daily_users__gte=usage_tier.lower_adu_threshold,
-            average_daily_users__lt=usage_tier.upper_adu_threshold,
-            hotness__gte=usage_tier.growth_threshold_before_flagging / 100,
-        )
-    if not tier_filters:
+        hotness_per_tier_filters |= usage_tier.get_growth_threshold_q_object()
+    if not hotness_per_tier_filters:
         return
-    qs = (
-        Addon.unfiltered.exclude(status=amo.STATUS_DISABLED)
-        .filter(type=amo.ADDON_EXTENSION)
-        .filter(tier_filters)
-    )
+    qs = base_qs.filter(hotness_per_tier_filters)
     NeedsHumanReview.set_on_addons_latest_signed_versions(
         qs, NeedsHumanReview.REASONS.HOTNESS_THRESHOLD
     )
+
+
+ERRONEOUSLY_ADDED_OVERGROWTH_DATE_RANGE = (
+    date(2024, 11, 5),
+    date(2024, 11, 7),
+)
+
+
+@task
+@use_primary_db
+def delete_erroneously_added_overgrowth_needshumanreview(addon_ids, **kw):
+    addons = Addon.unfiltered.filter(pk__in=addon_ids).no_transforms()
+    for addon in addons:
+        log.info(
+            'Deleting erroneously added NHR and updating due dates for %s', addon.pk
+        )
+        NeedsHumanReview.objects.filter(
+            version__addon=addon,
+            reason=NeedsHumanReview.REASONS.HOTNESS_THRESHOLD,
+            created__range=ERRONEOUSLY_ADDED_OVERGROWTH_DATE_RANGE,
+            is_active=True,
+        ).delete()
+        addon.update_all_due_dates()

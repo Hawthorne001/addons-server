@@ -1,11 +1,15 @@
 from django import http
+from django.conf import settings
 from django.contrib import admin, auth, contenttypes, messages
 from django.core.exceptions import PermissionDenied
+from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
+
+import waffle
 
 from olympia.activity.models import ActivityLog
 from olympia.addons.models import Addon
@@ -17,7 +21,7 @@ from .forms import (
     MultiAddForm,
     MultiDeleteForm,
 )
-from .models import Block, BlocklistSubmission, BlockVersion
+from .models import Block, BlocklistSubmission, BlockType, BlockVersion
 from .tasks import process_blocklistsubmission
 from .utils import splitlines
 
@@ -25,8 +29,8 @@ from .utils import splitlines
 class BlocklistSubmissionStateFilter(admin.SimpleListFilter):
     title = 'Signoff State'
     parameter_name = 'signoff_state'
-    default_value = BlocklistSubmission.SIGNOFF_PENDING
-    field_choices = BlocklistSubmission.SIGNOFF_STATES.items()
+    default_value = BlocklistSubmission.SIGNOFF_STATES.PENDING
+    field_choices = BlocklistSubmission.SIGNOFF_STATES.choices
     ALL = 'all'
     DELAYED = 'delayed'
 
@@ -67,6 +71,11 @@ class BlockAdminAddMixin:
                 'add_addon/<path:pk>/',
                 self.admin_site.admin_view(self.add_from_addon_pk_view),
                 name='blocklist_block_addaddon',
+            ),
+            path(
+                'upload_mlbf/',
+                self.admin_site.admin_view(self.upload_mlbf_view),
+                name='blocklist_block_upload_mlbf',
             ),
         ]
         return my_urls + super().get_urls()
@@ -141,6 +150,26 @@ class BlockAdminAddMixin:
             + f'?guids={addon.addonguid_guid}&{request.GET.urlencode()}'
         )
 
+    def upload_mlbf_view(self, request):
+        if request.method != 'POST':
+            return HttpResponseNotAllowed(['POST'])
+        if (
+            not settings.ENABLE_ADMIN_MLBF_UPLOAD
+            or not request.user.has_perm('blocklist.change_block')
+            or not waffle.switch_is_active('blocklist_mlbf_submit')
+        ):
+            raise PermissionDenied
+        force_base = request.GET.get('force_base', 'false').lower() == 'true'
+        from .tasks import upload_mlbf_to_remote_settings_task
+
+        upload_mlbf_to_remote_settings_task.delay(force_base=force_base)
+        messages.add_message(
+            request,
+            messages.SUCCESS,
+            'MLBF upload to remote settings has been triggered.',
+        )
+        return redirect('admin:blocklist_block_changelist')
+
 
 @admin.register(BlocklistSubmission)
 class BlocklistSubmissionAdmin(AMOModelAdmin):
@@ -148,6 +177,7 @@ class BlocklistSubmissionAdmin(AMOModelAdmin):
         'blocks_count',
         'action',
         'state',
+        'block_type',
         'delayed_until',
         'updated_by',
         'modified',
@@ -184,25 +214,20 @@ class BlocklistSubmissionAdmin(AMOModelAdmin):
         return False
 
     def is_approvable(self, obj):
-        return obj and obj.signoff_state == BlocklistSubmission.SIGNOFF_PENDING
+        return obj and obj.signoff_state == BlocklistSubmission.SIGNOFF_STATES.PENDING
 
     def is_changeable(self, obj):
         return obj and obj.signoff_state in (
-            BlocklistSubmission.SIGNOFF_PENDING,
-            BlocklistSubmission.SIGNOFF_AUTOAPPROVED,
+            BlocklistSubmission.SIGNOFF_STATES.PENDING,
+            BlocklistSubmission.SIGNOFF_STATES.AUTOAPPROVED,
         )
 
-    def get_value(self, name, request, obj=None, default=None):
+    def get_value(self, name, request, *, obj=None, default=None):
         """Gets the named property from the obj if provided, or POST or GET."""
         return (
             getattr(obj, name, default)
             if obj
             else request.POST.get(name, request.GET.get(name, default))
-        )
-
-    def is_add_change_submission(self, request, obj):
-        return str(self.get_value('action', request, obj, 0)) == str(
-            BlocklistSubmission.ACTION_ADDCHANGE
         )
 
     def has_change_permission(self, request, obj=None, strict=False):
@@ -247,7 +272,10 @@ class BlocklistSubmissionAdmin(AMOModelAdmin):
     def get_fieldsets(self, request, obj):
         is_new = obj is None
         show_canned = self.has_change_permission(request, obj, strict=True)
-        is_delete_submission = not self.is_add_change_submission(request, obj)
+        is_delete_submission = (
+            int(self.get_value('action', request, obj=obj, default=0))
+            == BlocklistSubmission.ACTIONS.DELETE
+        )
 
         input_guids_section = (
             'Input Guids',
@@ -276,6 +304,7 @@ class BlocklistSubmissionAdmin(AMOModelAdmin):
             {
                 'fields': (
                     changed_version_ids_field,
+                    'block_type',
                     'disable_addon',
                     'update_url_value',
                     'url',
@@ -317,6 +346,10 @@ class BlocklistSubmissionAdmin(AMOModelAdmin):
         return tuple(section for section in sections if section)
 
     def get_readonly_fields(self, request, obj=None):
+        is_delete_submission = (
+            int(self.get_value('action', request, obj=obj, default=0))
+            == BlocklistSubmission.ACTIONS.DELETE
+        )
         ro_fields = [
             'ro_changed_version_ids',
             'updated_by',
@@ -333,8 +366,8 @@ class BlocklistSubmissionAdmin(AMOModelAdmin):
                 ro_fields += admin.utils.flatten_fieldsets(
                     self.get_fieldsets(request, obj)
                 )
-        if obj or not self.is_add_change_submission(request, obj):
-            ro_fields.append('delay_days')
+        if obj or is_delete_submission:
+            ro_fields += ['block_type', 'delay_days']
 
         return ro_fields
 
@@ -350,7 +383,14 @@ class BlocklistSubmissionAdmin(AMOModelAdmin):
             raise PermissionDenied
 
         MultiBlockForm = self.get_form(request, change=False, **kwargs)
-        is_delete = not self.is_add_change_submission(request, None)
+        action = int(
+            self.get_value(
+                'action',
+                request,
+                obj=None,
+                default=BlocklistSubmission.ACTIONS.ADDCHANGE,
+            )
+        )
         guids_data = self.get_value('guids', request)
         if guids_data and 'input_guids' not in request.POST:
             # If we get a guids param it's a redirect from input_guids_view.
@@ -395,7 +435,7 @@ class BlocklistSubmissionAdmin(AMOModelAdmin):
         )
         context = {
             # standard context django admin expects
-            'title': 'Delete Blocks' if is_delete else 'Block Add-ons',
+            'title': BlocklistSubmission(action=action).get_action_display(),
             'subtitle': None,
             'adminform': admin_form,
             'object_id': None,
@@ -407,7 +447,6 @@ class BlocklistSubmissionAdmin(AMOModelAdmin):
             'errors': admin.helpers.AdminErrorList(form, []),
             'preserved_filters': self.get_preserved_filters(request),
             # extra context we use in our custom template
-            'is_delete': is_delete,
             'block_history': self.block_history(self.model(input_guids=guids_data)),
             'submission_published': False,
         }
@@ -421,7 +460,7 @@ class BlocklistSubmissionAdmin(AMOModelAdmin):
                 request, self.model._meta, object_id
             )
         extra_context['can_change_object'] = (
-            obj.action == BlocklistSubmission.ACTION_ADDCHANGE
+            obj.action == BlocklistSubmission.ACTIONS.ADDCHANGE
             and self.has_change_permission(request, obj, strict=True)
         )
         extra_context['can_approve'] = self.is_approvable(
@@ -451,12 +490,12 @@ class BlocklistSubmissionAdmin(AMOModelAdmin):
             if is_approve and self.is_approvable(obj):
                 if not self.has_signoff_approve_permission(request, obj):
                     raise PermissionDenied
-                obj.signoff_state = BlocklistSubmission.SIGNOFF_APPROVED
+                obj.signoff_state = BlocklistSubmission.SIGNOFF_STATES.APPROVED
                 obj.signoff_by = request.user
             elif is_reject:
                 if not self.has_signoff_reject_permission(request, obj):
                     raise PermissionDenied
-                obj.signoff_state = BlocklistSubmission.SIGNOFF_REJECTED
+                obj.signoff_state = BlocklistSubmission.SIGNOFF_STATES.REJECTED
             elif not self.has_change_permission(request, obj, strict=True):
                 # users without full change permission should only do signoff
                 raise PermissionDenied
@@ -505,7 +544,7 @@ class BlocklistSubmissionAdmin(AMOModelAdmin):
     def ro_changed_version_ids(self, obj):
         # Annoyingly, we don't have the full context, but we stashed blocks
         # earlier in render_change_form().
-        published = obj.signoff_state == obj.SIGNOFF_PUBLISHED
+        published = obj.signoff_state == obj.SIGNOFF_STATES.PUBLISHED
         total_adu = sum(
             (bl.current_adu if not published else bl.average_daily_users_snapshot) or 0
             for bl in obj._blocks
@@ -530,7 +569,9 @@ class BlocklistSubmissionAdmin(AMOModelAdmin):
             .filter(action__in=Block.ACTIVITY_IDS)
             .order_by('created')
         )
-        return render_to_string('admin/blocklist/includes/logs.html', {'logs': logs})
+        return render_to_string(
+            'admin/blocklist/includes/logs.html', {'BlockType': BlockType, 'logs': logs}
+        )
 
 
 @admin.register(Block)
@@ -573,7 +614,8 @@ class BlockAdmin(BlockAdminAddMixin, AMOModelAdmin):
 
     def blocked_versions(self, obj):
         return ', '.join(
-            sorted(obj.blockversion_set.values_list('version__version', flat=True))
+            f'{version.version} ({version.get_block_type_display()})'
+            for version in obj.blockversion_set.all()
         )
 
     def block_history(self, obj):
@@ -586,6 +628,7 @@ class BlockAdmin(BlockAdminAddMixin, AMOModelAdmin):
         return render_to_string(
             'admin/blocklist/includes/logs.html',
             {
+                'BlockType': BlockType,
                 'logs': logs,
                 'blocklistsubmission': submission,
                 'blocklistsubmission_changes': submission.get_changes_from_block(obj)
@@ -599,7 +642,7 @@ class BlockAdmin(BlockAdminAddMixin, AMOModelAdmin):
 
     def get_fieldsets(self, request, obj):
         details = (
-            None,
+            'Add-on',
             {
                 'fields': (
                     'addon_guid',
@@ -611,18 +654,18 @@ class BlockAdmin(BlockAdminAddMixin, AMOModelAdmin):
             },
         )
         history = ('Block History', {'fields': ('block_history',)})
-        edit = (
-            'Edit Block',
+        versions = ('Block Versions', {'fields': ('blocked_versions',)})
+        block = (
+            'Block Metadata',
             {
                 'fields': (
-                    'blocked_versions',
                     ('url', 'url_link'),
                     'reason',
                 ),
             },
         )
 
-        return (details, history, edit)
+        return (details, history, versions, block)
 
     def has_change_permission(self, request, obj=None):
         return False
@@ -639,6 +682,8 @@ class BlockAdmin(BlockAdminAddMixin, AMOModelAdmin):
 
     def changeform_view(self, request, obj_id=None, form_url='', extra_context=None):
         extra_context = extra_context or {}
+        extra_context['ACTION_SOFTEN'] = BlocklistSubmission.ACTIONS.SOFTEN
+        extra_context['ACTION_HARDEN'] = BlocklistSubmission.ACTIONS.HARDEN
         if obj_id:
             obj = (
                 self.get_object(request, obj_id)
@@ -673,5 +718,5 @@ class BlockAdmin(BlockAdminAddMixin, AMOModelAdmin):
             raise PermissionDenied
         return redirect(
             reverse('admin:blocklist_blocklistsubmission_add')
-            + f'?guids={obj.guid}&action={BlocklistSubmission.ACTION_DELETE}'
+            + f'?guids={obj.guid}&action={BlocklistSubmission.ACTIONS.DELETE}'
         )

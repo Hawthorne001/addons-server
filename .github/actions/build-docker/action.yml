@@ -1,93 +1,80 @@
-name: 'Docker Build'
-description: 'Builds `addons-server` docker image'
+name: 'Docker Build Action'
+description: 'Build the docker image'
 inputs:
-  password:
-    required: false
-    description: "Docker registry password"
-    default: "invalid"
+  registry:
+    required: true
+    description: The registry to tag the image with
+  image:
+    required: true
+    description: The image to tag the image with
+  version:
+    required: true
+    description: The image version to tag with
   push:
     required: false
-    description: "Build and push image to registry (cannot be used together with load)"
-    default: "false"
-  username:
-    required: false
-    description: "Docker registry username"
-    default: "invalid"
+    description: Push the image?
+    default: 'false'
 
 outputs:
+  tag:
+    description: The docker tag of the built image
+    value: ${{ steps.build_meta.outputs.tag }}
   version:
-    description: "The Docker version for the image"
+    description: The docker version of the built image
     value: ${{ steps.meta.outputs.version }}
-  tags:
-    description: "The Docker tags for the image"
-    value: ${{ steps.meta.outputs.tags }}
+  digest:
+    description: The docker build digest of the built image
+    value: ${{ steps.build_meta.outputs.digest }}
 
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
-    - name: Validate inputs
+    - name: Context
+      id: context
       shell: bash
       run: |
-        if [[ "${{ inputs.push  }}" == "true" && "${{ github.ref }}" == "refs/heads/master" ]]; then
-          echo "Cannot push to registry from master branch unless we migrate our master build job to GHA."
-          exit 1
-        fi
-    # Setup docker to build for multiple architectures
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
-      with:
-        version: latest
-        buildkitd-flags: --debug
+        git_repo_url="${{ github.server_url }}/${{ github.repository }}"
 
-    # Login to a registry to push the image
-    - name: Login to Container Registry
-      # Only login if we are pushing the image
-      if: ${{ inputs.push == 'true' }}
-      uses: docker/login-action@v3
-      with:
-        username: ${{ inputs.username }}
-        password: ${{ inputs.password }}
+        echo "git_build_url=$git_repo_url/actions/runs/${{ github.run_id }}" >> $GITHUB_OUTPUT
+        echo "git_sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+        echo "metadata_file=buildx-bake-metadata.json" >> $GITHUB_OUTPUT
 
-    # Determine the tags for the image
+        cat $GITHUB_OUTPUT
+
     - name: Docker meta
       id: meta
       uses: docker/metadata-action@v5
       with:
-        # Hard coding our dockerhub imnage name
-        images: mozilla/addons-server
-        flavor: |
-          prefix=ci-,onlatest=false
+        bake-target: web
+        images: ${{ inputs.registry }}/${{ inputs.image }}
         tags: |
-          type=schedule
-          type=ref,event=tag
-          type=ref,event=branch
-          type=ref,event=pr
-          # set latest tag for default branch
-          # Disabled for now as we do not use this action for
-          # The production build
-          # type=raw,value=latest,enable={{is_default_branch}}
-
-    - name: Define environment variables
-      shell: bash
-      run: |
-        echo "DOCKER_VERSION=${{ steps.meta.outputs.version }}" >> $GITHUB_ENV
-        echo "DOCKER_COMMIT=${{ github.sha }}" >> $GITHUB_ENV
-        echo "VERSION_BUILD_URL=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
-
-    - name: Create .env file
-      shell: bash
-      run: make create_env_file
-
-    - name: Create version
-      shell: bash
-      run: |
-        make version
+          # use raw tag to allow the calling workflow to define the version of the image
+          # and to prevent multiple tags from being associated with a build
+          type=raw,value=${{ inputs.version }}
 
     - name: Build Image
-      uses: docker/bake-action@v4
-      with:
-        targets: web
-        push: ${{ inputs.push }}
-        load: ${{ inputs.push == 'false' }}
+      id: build
+      shell: bash
+      env:
+        DOCKER_TAGS_FILE: ${{ steps.meta.outputs.bake-file-tags }}
+        DOCKER_ANNOTATIONS_FILE: ${{ steps.meta.outputs.bake-file-annotations }}
+        DOCKER_METADATA_FILE: ${{ steps.context.outputs.metadata_file }}
+        DOCKER_PUSH: ${{ inputs.push }}
+      run: |
+        make setup \
+          DOCKER_TARGET="production" \
+          DOCKER_VERSION="${{ steps.meta.outputs.version }}"
+
+        make docker_build_web \
+          DOCKER_COMMIT="${{ steps.context.outputs.git_sha }}" \
+          DOCKER_BUILD="${{ steps.context.outputs.git_build_url }}"
+
+    - name: Get image digest
+      id: build_meta
+      shell: bash
+      run: |
+        metadata=$(cat ${{ steps.context.outputs.metadata_file }})
+        echo "digest=$(echo $metadata | jq -r '.web."containerimage.digest"')" >> $GITHUB_OUTPUT
+        echo "tag=$(echo $metadata | jq -r '.web."image.name"')" >> $GITHUB_OUTPUT
+        cat $GITHUB_OUTPUT
+

@@ -11,6 +11,12 @@ from olympia.activity.models import ActivityLog
 from olympia.addons.models import Addon, AddonUser, AddonUserPendingConfirmation
 from olympia.amo.templatetags.jinja_helpers import absolutify
 from olympia.amo.tests import TestCase, addon_factory, formset, user_factory
+from olympia.constants.licenses import (
+    LICENSE_BSD,
+    LICENSE_CC_BY30,
+    LICENSE_CC_BY40,
+    LICENSE_CC_COPYRIGHT,
+)
 from olympia.users.models import EmailUserRestriction, UserProfile
 from olympia.versions.models import License, Version
 
@@ -79,21 +85,46 @@ class TestOwnership(TestCase):
 
 
 class TestEditPolicy(TestOwnership):
-    def test_edit_eula(self):
+    def test_edit_eula_and_not_privacy(self):
         old_eula = self.addon.eula
-        data = self.build_form_data({'eula': 'new eula', 'has_eula': True})
+        old_eula_str = str(old_eula)
+        old_privacy_str = str(self.addon.privacy_policy)
+        data = self.build_form_data(
+            {
+                'has_eula': True,
+                'eula': 'new eula',
+                'has_priv': True,
+                'privacy_policy': self.addon.privacy_policy,
+            }
+        )
         response = self.client.post(self.url, data)
+
         assert response.status_code == 302
         addon = self.get_addon()
         assert str(addon.eula) == 'new eula'
         assert addon.eula.id == old_eula.id
+        assert old_eula_str != str(addon.eula)
+        assert addon.privacy_policy == old_privacy_str
 
-    def test_delete_eula(self):
-        assert self.addon.eula
-        data = self.build_form_data({'has_eula': False})
+        assert ActivityLog.objects.filter(action=amo.LOG.EDIT_PROPERTIES.id).exists()
+
+    def test_delete_privacy_policy(self):
+        assert self.addon.privacy_policy
+        data = self.build_form_data(
+            {
+                'has_eula': True,
+                'eula': self.addon.eula,
+                'has_priv': False,
+                'privacy_policy': self.addon.privacy_policy,
+            }
+        )
         response = self.client.post(self.url, data)
         assert response.status_code == 302
-        assert self.get_addon().eula is None
+        addon = self.get_addon()
+        assert addon.privacy_policy is None
+        assert addon.eula
+
+        assert ActivityLog.objects.filter(action=amo.LOG.EDIT_PROPERTIES.id).exists()
 
     def test_edit_eula_locale(self):
         self.addon.eula = {'de': 'some eula', 'en-US': ''}
@@ -114,11 +145,13 @@ class TestEditLicense(TestOwnership):
         super().setUp()
         self.version.license = None
         self.version.save()
-        self.license = License.objects.create(builtin=7, name='bsd')
-        self.cc_license = License.objects.create(
-            builtin=11,
-            name='copyright',
+        License.objects.create(builtin=LICENSE_CC_COPYRIGHT.builtin)
+        self.license = License.objects.create(builtin=LICENSE_BSD.builtin)
+        # CC40 Licenses were created through versions migration 0046.
+        self.cc_license = License.objects.get(
+            builtin=LICENSE_CC_BY40.builtin,
         )
+        self.legacy_cc_license = License.objects.create(builtin=LICENSE_CC_BY30.builtin)
 
     def test_no_license(self):
         data = self.build_form_data({'builtin': ''})
@@ -134,19 +167,28 @@ class TestEditLicense(TestOwnership):
         assert response.status_code == 302
 
     def test_success_add_builtin(self):
-        data = self.build_form_data({'builtin': 7})
+        data = self.build_form_data({'builtin': LICENSE_BSD.builtin})
         response = self.client.post(self.url, data)
         assert response.status_code == 302
         assert self.license == self.get_version().license
         assert ActivityLog.objects.filter(action=amo.LOG.CHANGE_LICENSE.id).count() == 1
 
     def test_success_add_builtin_creative_commons(self):
-        self.addon.update(type=amo.ADDON_STATICTHEME)  # cc licenses for themes
-        data = self.build_form_data({'builtin': 11})
+        self.addon.update(type=amo.ADDON_STATICTHEME)  # cc licenses are for themes
+        data = self.build_form_data({'builtin': LICENSE_CC_BY40.builtin})
         response = self.client.post(self.url, data)
         assert response.status_code == 302
         assert self.cc_license == self.get_version().license
         assert ActivityLog.objects.filter(action=amo.LOG.CHANGE_LICENSE.id).count() == 1
+
+    def test_success_keep_creative_commons_v3_if_already_there(self):
+        self.addon.update(type=amo.ADDON_STATICTHEME)  # cc licenses are for themes
+        self.addon.current_version.update(license=self.legacy_cc_license)
+        data = self.build_form_data({'builtin': LICENSE_CC_BY30.builtin})
+        response = self.client.post(self.url, data)
+        assert response.status_code == 302
+        assert self.get_version().license == self.legacy_cc_license
+        assert ActivityLog.objects.filter(action=amo.LOG.CHANGE_LICENSE.id).count() == 0
 
     def test_success_add_custom(self):
         data = self.build_form_data(
@@ -191,7 +233,7 @@ class TestEditLicense(TestOwnership):
         }
 
     def test_success_switch_license(self):
-        data = self.build_form_data({'builtin': 7})
+        data = self.build_form_data({'builtin': LICENSE_BSD.builtin})
         response = self.client.post(self.url, data)
         license_one = self.get_version().license
 
@@ -207,10 +249,11 @@ class TestEditLicense(TestOwnership):
         assert license_one != license_two
 
         # Make sure the old license wasn't edited.
-        license = License.objects.get(builtin=7)
-        assert str(license.name) == 'bsd'
+        license = License.objects.get(builtin=LICENSE_BSD.builtin)
+        assert license.name is None
+        assert str(license) == str(LICENSE_BSD.name)
 
-        data = self.build_form_data({'builtin': 7})
+        data = self.build_form_data({'builtin': LICENSE_BSD.builtin})
         response = self.client.post(self.url, data)
         assert response.status_code == 302
         license_three = self.get_version().license
@@ -258,21 +301,47 @@ class TestEditLicense(TestOwnership):
         data = self.build_form_data({'builtin': License.OTHER, 'text': 'text'})
         self.version.addon.update(status=amo.STATUS_APPROVED)
         self.client.post(self.url, data)
-        assert ActivityLog.objects.exclude(action=amo.LOG.LOG_IN.id).count() == 1
+        assert ActivityLog.objects.exclude(action=amo.LOG.LOG_IN.id).count() == 2
+        assert ActivityLog.objects.filter(action=amo.LOG.CHANGE_LICENSE.id).count() == 1
 
         self.version.license = License.objects.all()[1]
         self.version.save()
 
         data = self.build_form_data({'builtin': License.OTHER, 'text': 'text'})
         self.client.post(self.url, data)
-        assert ActivityLog.objects.exclude(action=amo.LOG.LOG_IN.id).count() == 2
+        assert ActivityLog.objects.exclude(action=amo.LOG.LOG_IN.id).count() == 4
+        assert ActivityLog.objects.filter(action=amo.LOG.CHANGE_LICENSE.id).count() == 2
+
+    def test_builtin_license_choices(self):
+        response = self.client.get(self.url)
+        doc = pq(response.content)
+        inputs = doc('#id_builtin input')
+        assert len(inputs) == 2
+        license_ids = [int(elm.attrib['value']) for elm in inputs]
+        expected_licenses_ids = list(
+            License.objects.builtins(cc=False).values_list('builtin', flat=True)
+        ) + [License.OTHER]
+        assert license_ids == expected_licenses_ids
+
+    def test_builtin_licenses_choices_themes(self):
+        self.addon.update(type=amo.ADDON_STATICTHEME)
+        response = self.client.get(self.url)
+        doc = pq(response.content)
+        inputs = doc('#id_builtin input')
+        assert len(inputs) == 7
+        license_ids = [int(elm.attrib['value']) for elm in inputs]
+        expected_licenses_ids = list(
+            License.objects.builtins(cc=True).values_list('builtin', flat=True)
+        )
+        assert license_ids == expected_licenses_ids
 
 
 class TestEditAuthor(TestOwnership):
     def test_reorder_authors(self):
         """
         Re-ordering authors should not generate role changes in the
-        ActivityLog.
+        ActivityLog for the author change. But the view also has eula and privacy
+        policy fields which will generate an activity log.
         """
         # First, add someone else manually in second position.
         AddonUser.objects.create(
@@ -302,7 +371,9 @@ class TestEditAuthor(TestOwnership):
                 'user_form-1-position': 0,
             }
         )
-        original_activity_log_count = ActivityLog.objects.all().count()
+        original_activity_log_count = ActivityLog.objects.exclude(
+            action=amo.LOG.EDIT_PROPERTIES.id
+        ).count()
         response = self.client.post(self.url, data)
 
         # Check the results.
@@ -316,7 +387,10 @@ class TestEditAuthor(TestOwnership):
             )
             == expected_authors
         )
-        assert ActivityLog.objects.all().count() == original_activity_log_count
+        assert (
+            ActivityLog.objects.exclude(action=amo.LOG.EDIT_PROPERTIES.id).count()
+            == original_activity_log_count
+        )
 
     def test_success_add_user(self):
         additional_data = formset(

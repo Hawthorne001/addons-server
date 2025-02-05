@@ -10,6 +10,11 @@ from olympia.accounts.serializers import BaseUserSerializer
 from olympia.api.exceptions import UnavailableForLegalReasons
 from olympia.api.fields import ReverseChoiceField
 from olympia.api.serializers import AMOModelSerializer
+from olympia.constants.abuse import (
+    ILLEGAL_CATEGORIES,
+    ILLEGAL_SUBCATEGORIES,
+    ILLEGAL_SUBCATEGORIES_BY_CATEGORY,
+)
 
 from .models import AbuseReport
 from .tasks import report_to_cinder
@@ -51,6 +56,16 @@ class BaseAbuseReportSerializer(AMOModelSerializer):
             'The language code of the locale used by the client for the application.'
         ),
     )
+    illegal_category = ReverseChoiceField(
+        choices=list(ILLEGAL_CATEGORIES.api_choices),
+        required=False,
+        allow_null=True,
+    )
+    illegal_subcategory = ReverseChoiceField(
+        choices=list(ILLEGAL_SUBCATEGORIES.api_choices),
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = AbuseReport
@@ -61,6 +76,8 @@ class BaseAbuseReportSerializer(AMOModelSerializer):
             'reporter',
             'reporter_name',
             'reporter_email',
+            'illegal_category',
+            'illegal_subcategory',
         )
 
     def validate(self, data):
@@ -76,6 +93,49 @@ class BaseAbuseReportSerializer(AMOModelSerializer):
                 else:
                     msg = serializers.CharField.default_error_messages['blank']
                 raise serializers.ValidationError({'message': [msg]})
+
+        # When the reason is "illegal", the `illegal_category` field is
+        # required.
+        if data.get('reason') == AbuseReport.REASONS.ILLEGAL:
+            if 'illegal_category' not in data:
+                msg = serializers.Field.default_error_messages['required']
+                raise serializers.ValidationError({'illegal_category': [msg]})
+            elif data.get('illegal_category') is None:
+                msg = serializers.Field.default_error_messages['null']
+                raise serializers.ValidationError({'illegal_category': [msg]})
+        elif data.get('illegal_category') is not None:
+            msg = (
+                'This value must be omitted or set to "null" when the `reason` is not '
+                '"illegal".'
+            )
+            raise serializers.ValidationError({'illegal_category': [msg]})
+
+        # When the reason is "illegal", the `illegal_subcategory` field is also
+        # required. In addition, the subcategory depends on the category set.
+        if data.get('reason') == AbuseReport.REASONS.ILLEGAL:
+            subcategory = data.get('illegal_subcategory')
+            valid_subcategories = ILLEGAL_SUBCATEGORIES_BY_CATEGORY.get(
+                data.get('illegal_category'), []
+            )
+            if 'illegal_subcategory' not in data:
+                msg = serializers.Field.default_error_messages['required']
+                raise serializers.ValidationError({'illegal_subcategory': [msg]})
+            elif subcategory is None:
+                msg = serializers.Field.default_error_messages['null']
+                raise serializers.ValidationError({'illegal_subcategory': [msg]})
+            elif subcategory not in valid_subcategories:
+                msg = (
+                    'This value cannot be used in combination with the '
+                    'supplied `illegal_category`.'
+                )
+                raise serializers.ValidationError({'illegal_subcategory': [msg]})
+        elif data.get('illegal_subcategory') is not None:
+            msg = (
+                'This value must be omitted or set to "null" when the `reason` is not '
+                '"illegal".'
+            )
+            raise serializers.ValidationError({'illegal_subcategory': [msg]})
+
         return data
 
     def validate_target(self, data, target_name):
@@ -95,7 +155,7 @@ class BaseAbuseReportSerializer(AMOModelSerializer):
         instance = super().create(validated_data)
         if (
             waffle.switch_is_active('dsa-job-technical-processing')
-            and validated_data.get('reason') in AbuseReport.REASONS.REPORTABLE_REASONS
+            and instance.is_individually_actionable
         ):
             # call task to fire off cinder report
             report_to_cinder.delay(instance.id)
@@ -179,14 +239,14 @@ class AddonAbuseReportSerializer(BaseAbuseReportSerializer):
 
         try:
             is_value_unknown = value not in reversed_choices
-        except TypeError:
+        except TypeError as exc:
             # Log the invalid type and raise a validation error.
             log.warning(
                 'Invalid type for abuse report %s value submitted: %s',
                 field_name,
                 str(data[field_name])[:255],
             )
-            raise serializers.ValidationError({field_name: _('Invalid value')})
+            raise serializers.ValidationError({field_name: _('Invalid value')}) from exc
 
         if is_value_unknown:
             log.warning(
@@ -197,11 +257,19 @@ class AddonAbuseReportSerializer(BaseAbuseReportSerializer):
             value = 'other'
         return value
 
+    def handle_addon_signature(self, value):
+        # When the value is starting with `unknown: `, we force the value to
+        # UNKNOWN to account for any unknown value sent by Firefox, see:
+        # https://searchfox.org/mozilla-central/rev/b368ed8b48c0ea8ed2f1948e4776a6fbb5976dff/toolkit/mozapps/extensions/AbuseReporter.sys.mjs#218-219
+        if isinstance(value, str) and value.lower().startswith('unknown: '):
+            return 'unknown'
+        return value
+
     def to_internal_value(self, data):
-        # We want to accept unknown incoming data for `addon_install_method`
-        # and `addon_install_source`, we have to transform it here, we can't
-        # do it in a custom validation method because validation would be
-        # skipped entirely if the value is not a valid choice.
+        # We want to accept unknown incoming data for `addon_install_method`,
+        # `addon_install_source` and `addon_signature`, we have to transform it
+        # here, we can't do it in a custom validation method because validation
+        # would be skipped entirely if the value is not a valid choice.
         if 'addon_install_method' in data:
             data['addon_install_method'] = self.handle_unknown_install_method_or_source(
                 data, 'addon_install_method'
@@ -209,6 +277,10 @@ class AddonAbuseReportSerializer(BaseAbuseReportSerializer):
         if 'addon_install_source' in data:
             data['addon_install_source'] = self.handle_unknown_install_method_or_source(
                 data, 'addon_install_source'
+            )
+        if 'addon_signature' in data:
+            data['addon_signature'] = self.handle_addon_signature(
+                data['addon_signature']
             )
         self.validate_target(data, 'addon')
         view = self.context.get('view')

@@ -25,8 +25,8 @@
     {% endif %}
   </h2>
   <h4 class="author">by
-    {% for author in addon.listed_authors %}
-    <a href="{{ url('reviewers.developer_profile', author.id) }}">{{ author.name }}</a>{% if not loop.last %},{% endif %}
+    {% for author in addon.current_authors %}
+    <a href="{{ url('reviewers.developer_profile', author.id) }}"{% if not author.listed %}class="is_unlisted"{% endif %}>{{ author.name }}</a>{% if not loop.last %},{% endif %}
     {% endfor %}
   </h4>
 
@@ -62,7 +62,12 @@
   </h3>
   <ul>
     {% for activity in important_changes_log %}
-      <li {% if activity.log.reviewer_review_action %}class="reviewer-review-action"{% endif %}>{{ activity.created|datetime }}: {{ activity.to_string('reviewer') }}</li>
+      <li {% if activity.log.reviewer_review_action %}class="reviewer-review-action"{% endif %}>
+        <p>{{ activity.created|datetime }}: {{ activity.to_string('reviewer') }}</p>
+        {% if activity.details.comments %}
+          <p>{{ activity.details.comments }}</p>
+        {% endif %}
+      </li>
     {% endfor %}
   </ul>
 </div>
@@ -97,7 +102,7 @@
 </form>
 {% endif %}
 
-<form method="POST" action="#review-actions" class="review-form">
+<form method="POST" enctype="multipart/form-data" action="#review-actions" class="review-form">
   {% csrf_token %}
 
   <input type="hidden" name="version_pk" value="{{ version.pk }}"/>
@@ -167,10 +172,9 @@
       {{ form.versions }}
       {{ form.versions.errors }}
 
-      <div class="review-actions-section data-toggle review-comments"
-           data-value="{{ actions_comments|join(' ') }}">
+      <div class="review-actions-section">
         <div class="review-actions-comments-reasons">
-          <div class="review-actions-comments">
+          <div class="review-actions-comments data-toggle review-comments" data-value="{{ actions_comments|join(' ') }}">
             <label for="id_comments">{{ form.comments.label }}</label>
             {{ form.comments }}
             {{ form.comments.errors }}
@@ -181,18 +185,38 @@
             <div class="review-actions-reasons-select">
               {{ form.reasons }}
             </div>
-            <div class="review-actions-reasons-error">
-              {{ form.reasons.errors }}
+            {% if form.reasons.errors %}
+              <div class="review-actions-reasons-error">{{ form.reasons.errors }}</div>
+            {% endif %}
+          </div>
+          <div class="data-toggle review-actions-policies"
+               data-value="{{ actions_policies|join(' ') }}">
+            <label for="id_cinder_policies">{{ form.cinder_policies.label }}</label>
+            <div class="review-actions-policies-select">
+              {{ form.cinder_policies }}
+            </div>
+            <div>
+              {{ form.cinder_policies.errors }}
+            </div>
+          </div>
+          <div class="data-toggle"
+               data-value="resolve_appeal_job">
+            <label for="id_appeal_action">{{ form.appeal_action.label }}</label>
+            <div class="review-actions-policies-select">
+              {{ form.appeal_action }}
+            </div>
+            <div>
+              {{ form.appeal_action.errors }}
             </div>
           </div>
         </div>
       </div>
 
       <div class="review-actions-section data-toggle review-resolve-abuse-reports"
-           data-value="{{ actions_resolves_abuse_reports|join(' ') }}">
-          <strong><label for="id_resolve_cinder_jobs">{{ form.resolve_cinder_jobs.label }}</label></strong>
-          {{ form.resolve_cinder_jobs }}
-          {{ form.resolve_cinder_jobs.errors }}
+           data-value="{{ actions_resolves_cinder_jobs|join(' ') }}">
+          <strong><label for="id_cinder_jobs_to_resolve">{{ form.cinder_jobs_to_resolve.label }}</label></strong>
+          {{ form.cinder_jobs_to_resolve }}
+          {{ form.cinder_jobs_to_resolve.errors }}
       </div>
 
       <div class="review-actions-section review-actions-files data-toggle review-files"
@@ -222,21 +246,41 @@
         {{ form.operating_systems.errors }}
         {{ form.applications.errors }}
       </div>
-      <div class="review-actions-section data-toggle review-delayed-rejection"
-           data-value="{{ actions_delayable|join(' ') }}">
-        <div class="review-delayed-rejection-inner">
-          {{ form.delayed_rejection }}
-          {{ form.delayed_rejection.errors }}
-
-          <div class="review-delayed-rejection-deadline">
-            {{ form.delayed_rejection_days }}
-            <label for="{{ form.delayed_rejection_days.auto_id }}">
-              {{ form.delayed_rejection_days.label }}
-            </label>
-            {{ form.delayed_rejection_days.errors }}
+      {% if form.delayed_rejection and form.delayed_rejection_date %}
+        <div class="review-actions-section data-toggle review-delayed-rejection"
+             data-value="{{ actions_delayable|join(' ') }}">
+          <div class="review-delayed-rejection-inner">
+            {{ form.delayed_rejection }}
+            <div class="review-delayed-rejection-deadline">
+              {{ form.delayed_rejection_date }} UTC
+              {{ form.delayed_rejection_date.errors }}
+            </div>
+            {{ form.delayed_rejection.errors }}
           </div>
         </div>
-      </div>
+      {% endif %}
+      {% if switch_is_active('enable-activity-log-attachments') %}
+        <div class="review-actions-section data-toggle review-actions-attachment-reply"
+        data-value="{{ actions_attachments|join(' ') }}"
+        >
+          <label>Attachment:</label>
+          <div id="attachment-type-toggle">
+            <button type="button" id="toggle_attachment_file">Upload</button>
+            or <a id="toggle_attachment_input">Paste from Clipboard</a>
+          </div>
+          <div id="attachment_input_wrapper" class="hidden">
+            {{ form.attachment_input }}
+          </div>
+          <div id="attachment_file_wrapper" class="hidden">
+              {{ form.attachment_file }}
+          </div>
+          <a id="attachment_back" class="hidden">Back</a>
+          <div id="attachment_errors">
+            {{ form.attachment_input.errors }}
+            {{ form.attachment_file.errors }}
+          </div>
+        </div>
+      {% endif %}
       <div class="review-actions-section review-actions-save">
         <span class="currently_viewing_warning">
           {% trans %}
@@ -280,11 +324,15 @@
     <ul class="admin_only">
       <li {% if not version.due_date %}class="hidden"{% endif %}>
         <label for="due_date_update">Change latest version review due date</label>
-        <input type="datetime-local" id="due_date_update"
+        <div class="datetime-wrapper">
+          <input type="datetime-local" id="due_date_update"
                 {% if version.due_date %} value="{{ version.due_date.isoformat(timespec='seconds') }}" {% endif %}
                 data-api-data="{{ version.pk }}"
                 data-api-url="{{ drf_url('reviewers-addon-due-date', addon.pk) }}"
-        />
+                autocomplete="off"
+          />
+          <button id="submit_due_date_update" class="disabled" type="button">OK</button>
+        </div>
       </li>
       {% if addon.is_deleted %}
         <li {% if not addon.is_guid_denied %}class="hidden"{% endif %}>
@@ -445,13 +493,6 @@
     <li><a href="#whiteboard_form">Whiteboard</a></li>
     <li><a href="#history">Add-on History</a></li>
     <li><a href="#review-actions">Resolution</a></li>
-  </ul>
-
-  <strong>Authors</strong>
-  <ul>
-    {% for author in addon.authors.all() %}
-    <li><a href="{{ url('reviewers.developer_profile', author.id) }}">{{ author.name }}</a></li>
-    {% endfor %}
   </ul>
 
   <strong>Categories</strong>

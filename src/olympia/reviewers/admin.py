@@ -1,10 +1,16 @@
-from django import forms
-from django.contrib import admin
+from urllib.parse import urljoin
 
+from django import forms
+from django.conf import settings
+from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html
+
+from olympia import amo
 from olympia.amo.admin import AMOModelAdmin
 from olympia.zadmin.admin import related_single_content_link
 
-from .models import NeedsHumanReview, ReviewActionReason, UsageTier
+from .models import NeedsHumanReview, ReviewActionReason, ReviewQueueHistory, UsageTier
 
 
 class ReviewActionReasonAdminForm(forms.ModelForm):
@@ -63,8 +69,41 @@ class UsageTierAdmin(AMOModelAdmin):
         'lower_adu_threshold',
         'upper_adu_threshold',
         'growth_threshold_before_flagging',
+        'computed_growth_threshold_before_flagging',
+        'computed_number_of_addons_that_would_be_flagged_for_growth',
         'abuse_reports_ratio_threshold_before_flagging',
     )
+    readonly_fields = (
+        'computed_growth_threshold_before_flagging',
+        'computed_number_of_addons_that_would_be_flagged_for_growth',
+    )
+
+    def computed_growth_threshold_before_flagging(self, obj):
+        return obj.get_growth_threshold()
+
+    def computed_number_of_addons_that_would_be_flagged_for_growth(self, obj):
+        return (
+            UsageTier.get_base_addons()
+            .filter(obj.get_growth_threshold_q_object())
+            .count()
+        )
+
+    def get_form(self, request, obj=None, **kwargs):
+        if obj:
+            help_texts = {
+                'computed_growth_threshold_before_flagging': (
+                    'Actual growth threshold above which we would flag add-ons in that '
+                    'tier, as computed using the percentage defined above and the '
+                    'currrent average growth of add-ons (currently {}) in that tier.'
+                ).format(obj.average_growth),
+                'computed_number_of_addons_that_would_be_flagged_for_growth': (
+                    'Number of add-ons that would be flagged for growth using the '
+                    'percentage defined above, if the task ran now with the current '
+                    'add-on growth values.'
+                ),
+            }
+            kwargs.update({'help_texts': help_texts})
+        return super().get_form(request, obj, **kwargs)
 
 
 admin.site.register(UsageTier, UsageTierAdmin)
@@ -103,3 +142,46 @@ class NeedsHumanReviewAdmin(AMOModelAdmin):
 
 
 admin.site.register(NeedsHumanReview, NeedsHumanReviewAdmin)
+
+
+class ReviewQueueHistoryAdmin(AMOModelAdmin):
+    list_display = (
+        'id',
+        'version',
+        'created',
+        'original_due_date',
+        'exit_date',
+        'review_decision_log',
+        'review_link',
+    )
+    view_on_site = False
+
+    def review_link(self, obj):
+        version = obj.version
+        return format_html(
+            '<a href="{}">Review</a>',
+            urljoin(
+                settings.EXTERNAL_SITE_URL,
+                reverse(
+                    'reviewers.review',
+                    args=[
+                        'unlisted'
+                        if version.channel == amo.CHANNEL_UNLISTED
+                        else 'listed',
+                        version.addon_id,
+                    ],
+                ),
+            ),
+        )
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+admin.site.register(ReviewQueueHistory, ReviewQueueHistoryAdmin)

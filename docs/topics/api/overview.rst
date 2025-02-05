@@ -246,7 +246,7 @@ Note, if the field is also a translated field then the ``url`` and ``outgoing``
 values could be an object rather than a string
 (See :ref:`translated fields <api-overview-translations>` for translated field representations).
 
-Fields supporting some HTML, such as add-on ``description`` or ``summary``,
+Fields supporting some HTML or Markdown, such as add-on ``description`` or ``summary``,
 always wrap any links directly inside the content (the original url is not available).
 
 
@@ -397,6 +397,7 @@ v4 API changelog
 * 2021-01-14: as addons-frontend now uses /v5/, v5 becomes the stable default; v4 becomes frozen; v3 is deprecated
 * 2021-02-12: added ``versions_url`` to addon detail endpoint. https://github.com/mozilla/addons-server/issues/16534
 * 2021-02-25: ``platform`` filtering was removed from add-on search and autocomplete endpoints. https://github.com/mozilla/addons-server/issues/16463
+* 2024-11-28: reviewers APIs to list, browse, compare and draft comments on versions were removed.
 
 ----------------
 v5 API changelog
@@ -469,6 +470,11 @@ These are `v5` specific changes - `v4` changes apply also.
 * 2023-11-02: removed ``application`` from categories endpoint, flattened ``categories`` in addon detail/search endpoint. https://github.com/mozilla/addons-server/issues/5989
 * 2023-11-09: removed reviewers /enable and /disable endpoints. https://github.com/mozilla/addons-server/issues/21356
 * 2023-12-07: added ``lang`` parameter to all /abuse/report/ endpoints. https://github.com/mozilla/addons-server/issues/21529
+* 2024-06-20: added ``illegal_category`` parameter to all /abuse/report/ endpoints. https://github.com/mozilla/addons/issues/14870
+* 2024-06-20: added ``illegal_subcategory`` parameter to all /abuse/report/ endpoints. https://github.com/mozilla/addons/issues/14875
+* 2024-08-08: added support for writing to add-on eula_policy endpoint. https://github.com/mozilla/addons/issues/14927
+* 2024-08-22: restricted add-on eula_policy endpoint to non-themes only. https://github.com/mozilla/addons/issues/14937
+* 2024-10-17: replaced ``versions`` with ``blocked`` and ``soft_blocked`` in blocklist api; dropped unused ``min_version`` and ``max_version``. https://github.com/mozilla/addons/issues/15015
 
 .. _`#11380`: https://github.com/mozilla/addons-server/issues/11380/
 .. _`#11379`: https://github.com/mozilla/addons-server/issues/11379/

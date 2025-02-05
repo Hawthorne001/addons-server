@@ -21,10 +21,10 @@ from urllib.parse import (
     parse_qsl,
     unquote_to_bytes,
     urlencode as urllib_urlencode,
-    urlparse,
 )
 
 import django.core.mail
+from django import forms
 from django.conf import settings
 from django.core.exceptions import FieldDoesNotExist
 from django.core.files.storage import FileSystemStorage, default_storage as storage
@@ -43,9 +43,9 @@ from django.utils.http import (
     quote_etag,
     url_has_allowed_host_and_scheme,
 )
+from django.utils.translation import gettext
 
 import basket
-import bleach
 import colorgram
 import html5lib
 import markupsafe
@@ -63,11 +63,16 @@ from olympia.amo.urlresolvers import linkify_with_outgoing
 from olympia.constants.abuse import REPORTED_MEDIA_BACKUP_EXPIRATION_DAYS
 from olympia.core.logger import getLogger
 from olympia.lib import unicodehelper
+from olympia.translations.fields import LocaleErrorMessage
 from olympia.translations.models import Translation
 from olympia.users.utils import UnsubscribeCode
 
 
 log = getLogger('z.amo')
+
+
+# Basic regexp to detect links.
+URL_RE = re.compile(r'https?://\S+', re.IGNORECASE)
 
 
 def from_string(string):
@@ -253,7 +258,8 @@ def send_mail(
         kwargs.update(options)
         # Email subject *must not* contain newlines
         args = (list(recipients), ' '.join(subject.splitlines()), message)
-        return send_email.delay(*args, **kwargs)
+        send_email.delay(*args, **kwargs)
+        return True
 
     if white_list:
         if perm_setting:
@@ -1066,23 +1072,49 @@ def find_language(locale):
     return None
 
 
-def has_links(html):
-    """Return True if links (text or markup) are found in the given html."""
+def has_urls(content):
+    """Return True if URLs are found in the given html."""
 
-    # Call bleach.linkify to transform text links to real links, and add some
-    # content to the ``href`` attribute. If the result is different from the
-    # initial string, links were found.
-    class LinkFound(Exception):
-        pass
+    return URL_RE.search(content) if content else False
 
-    def raise_on_link(attrs, new):
-        raise LinkFound
 
-    try:
-        bleach.linkify(html, callbacks=[raise_on_link])
-    except LinkFound:
-        return True
-    return False
+def verify_condition_with_locales(*, value, check_func, form=None, field_name=None):
+    """
+    Check that the given `check_func` function does not raise a ValidationError
+    for the given `value`. If `value` is a `dict`, it assumes the keys are
+    locales and the values are translations in those locales.
+
+    `form` and `field_name` can be passed to transform to ValidationError that
+    would be raised into a locale-aware error message that is added to the
+    form.
+    """
+
+    if not isinstance(value, dict):
+        check_func(value)
+    else:
+        for locale, localized_name in value.items():
+            try:
+                check_func(localized_name)
+            except forms.ValidationError as exc:
+                if form is not None and field_name is not None:
+                    for message in exc.messages:
+                        error_message = LocaleErrorMessage(
+                            message=message, locale=locale
+                        )
+                        form.add_error(field_name, error_message)
+                else:
+                    raise
+
+
+def verify_no_urls(value, *, form=None, field_name=None):
+    def _check(value):
+        if has_urls(value):
+            raise forms.ValidationError(gettext('URLs are not allowed.'))
+
+    verify_condition_with_locales(
+        value=value, check_func=_check, form=form, field_name=field_name
+    )
+    return value
 
 
 def walkfiles(folder, suffix=''):
@@ -1132,7 +1164,7 @@ def extract_colors_from_image(path):
 def use_fake_fxa():
     """Return whether or not to use a fake FxA server for authentication.
     Should always return False in production"""
-    return settings.DEBUG and settings.USE_FAKE_FXA_AUTH
+    return settings.DEV_MODE and settings.USE_FAKE_FXA_AUTH
 
 
 class AMOJSONEncoder(JSONEncoder):
@@ -1171,10 +1203,7 @@ def is_safe_url(url, request, allowed_hosts=None):
     """Use Django's `url_has_allowed_host_and_scheme()` and pass a configured
     list of allowed hosts and enforce HTTPS.  `allowed_hosts` can be specified."""
     if not allowed_hosts:
-        allowed_hosts = (
-            settings.DOMAIN,
-            urlparse(settings.CODE_MANAGER_URL).netloc,
-        )
+        allowed_hosts = (settings.DOMAIN,)
         if settings.ADDONS_FRONTEND_PROXY_PORT:
             allowed_hosts = allowed_hosts + (
                 f'{settings.DOMAIN}:{settings.ADDONS_FRONTEND_PROXY_PORT}',

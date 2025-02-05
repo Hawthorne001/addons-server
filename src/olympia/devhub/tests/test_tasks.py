@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from unittest import mock
 
-from django.conf import settings
 from django.core import mail
 from django.core.files.storage import default_storage as storage
 from django.test.utils import override_settings
@@ -88,22 +87,11 @@ def test_recreate_previews(pngcrush_image_mock):
 
 class ValidatorTestCase(TestCase):
     def setUp(self):
-        self.create_appversion('firefox', '38.0a1')
-
         # Required for WebExtensions tests.
         self.create_appversion('firefox', '*')
-        self.create_appversion('firefox', '42.0')
-        self.create_appversion('firefox', '42.*')
-        self.create_appversion('firefox', '43.0')
-
-        # Required for 57-specific tests.
-        self.create_appversion('android', '38.0a1')
         self.create_appversion('android', '*')
-        self.create_appversion('firefox', '57.0')
-
-        # Required for Android tests.
-        self.create_appversion('android', '42.0')
-        self.create_appversion('android', '45.0')
+        self.create_appversion('firefox', amo.DEFAULT_WEBEXT_MIN_VERSION)
+        self.create_appversion('android', amo.DEFAULT_WEBEXT_MIN_VERSION)
 
     def create_appversion(self, name, version):
         return AppVersion.objects.create(application=amo.APPS[name].id, version=version)
@@ -581,7 +569,6 @@ class TestInitialSubmissionAcknoledgementEmail(TestCase):
                 'detail_url': absolutify(addon.get_url_path()),
             },
             recipient_list=['del@icio.us'],
-            from_email=settings.ADDONS_EMAIL,
             use_deny_list=False,
             perm_setting='individual_contact',
         )

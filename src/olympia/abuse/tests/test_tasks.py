@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import datetime
 from unittest import mock
 
@@ -13,28 +14,32 @@ from olympia import amo
 from olympia.abuse.tasks import flag_high_abuse_reports_addons_according_to_review_tier
 from olympia.activity.models import ActivityLog
 from olympia.amo.tests import TestCase, addon_factory, days_ago, user_factory
-from olympia.constants.abuse import DECISION_ACTIONS
+from olympia.constants.abuse import (
+    DECISION_ACTIONS,
+    ILLEGAL_CATEGORIES,
+    ILLEGAL_SUBCATEGORIES,
+)
 from olympia.constants.reviewers import EXTRA_REVIEW_TARGET_PER_DAY_CONFIG_KEY
 from olympia.files.models import File
 from olympia.reviewers.models import NeedsHumanReview, ReviewActionReason, UsageTier
 from olympia.versions.models import Version
 from olympia.zadmin.models import set_config
 
-from ..models import AbuseReport, CinderDecision, CinderJob, CinderPolicy
+from ..models import AbuseReport, CinderJob, CinderPolicy, ContentDecision
 from ..tasks import (
     appeal_to_cinder,
-    notify_addon_decision_to_cinder,
+    handle_escalate_action,
+    report_decision_to_cinder_and_notify,
     report_to_cinder,
-    resolve_job_in_cinder,
     sync_cinder_policies,
 )
 
 
-def addon_factory_with_abuse_reports(*args, **kwargs):
-    abuse_reports_count = kwargs.pop('abuse_reports_count')
-    addon = addon_factory(*args, **kwargs)
+def addon_factory_with_abuse_reports(*, abuse_reports_count, **kwargs):
+    abuse_kwargs = kwargs.pop('abuse_reports_kwargs', {})
+    addon = addon_factory(**kwargs)
     for _x in range(0, abuse_reports_count):
-        AbuseReport.objects.create(guid=addon.guid)
+        AbuseReport.objects.create(guid=addon.guid, **abuse_kwargs)
     return addon
 
 
@@ -123,6 +128,22 @@ def test_flag_high_abuse_reports_addons_according_to_review_tier():
             ).current_version,
             is_active=True,
         ).version.addon,
+        # only has reports that are individually actionable, so ignored
+        addon_factory_with_abuse_reports(
+            name='B tier, but all dsa reasons',
+            average_daily_users=200,
+            abuse_reports_count=2,
+            abuse_reports_kwargs={
+                'reason': AbuseReport.REASONS.HATEFUL_VIOLENT_DECEPTIVE
+            },
+        ),
+        # Would be above the threshold, but has one report that is individually
+        # actionable so just below
+        addon_factory_with_abuse_reports(
+            name='A tier, but one report a dsa reason, for a listed version',
+            average_daily_users=250,
+            abuse_reports_count=3,
+        ),
         # Belongs to B tier but the last abuse report that would make its total
         # above threshold is deleted, and it has another old one that does not
         # count (see below).
@@ -132,8 +153,14 @@ def test_flag_high_abuse_reports_addons_according_to_review_tier():
             abuse_reports_count=2,
         ),
     ]
-    AbuseReport.objects.filter(guid=not_flagged[-1].guid).latest('pk').delete()
-    AbuseReport.objects.create(guid=not_flagged[-1].guid, created=days_ago(15))
+    with_deleted_report = not_flagged[-1]
+    AbuseReport.objects.filter(guid=with_deleted_report.guid).latest('pk').delete()
+    AbuseReport.objects.create(guid=with_deleted_report.guid, created=days_ago(15))
+    with_dsa_report = not_flagged[-2]
+    AbuseReport.objects.filter(guid=with_dsa_report.guid).latest('pk').update(
+        addon_version=with_dsa_report.current_version.version,
+        reason=AbuseReport.REASONS.HATEFUL_VIOLENT_DECEPTIVE,
+    )
 
     flagged = [
         addon_factory_with_abuse_reports(
@@ -203,7 +230,11 @@ def test_flag_high_abuse_reports_addons_according_to_review_tier():
 def test_addon_report_to_cinder(statsd_incr_mock):
     addon = addon_factory()
     abuse_report = AbuseReport.objects.create(
-        guid=addon.guid, reason=AbuseReport.REASONS.ILLEGAL, message='This is bad'
+        guid=addon.guid,
+        reason=AbuseReport.REASONS.ILLEGAL,
+        message='This is bad',
+        illegal_category=ILLEGAL_CATEGORIES.OTHER,
+        illegal_subcategory=ILLEGAL_SUBCATEGORIES.OTHER,
     )
     assert not CinderJob.objects.exists()
     responses.add(
@@ -231,6 +262,8 @@ def test_addon_report_to_cinder(statsd_incr_mock):
                         'or contains content that '
                         'violates the law',
                         'considers_illegal': True,
+                        'illegal_category': 'STATEMENT_CATEGORY_OTHER',
+                        'illegal_subcategory': 'KEYWORD_OTHER',
                     },
                     'entity_type': 'amo_report',
                 }
@@ -282,7 +315,11 @@ def test_addon_report_to_cinder(statsd_incr_mock):
 def test_addon_report_to_cinder_exception(statsd_incr_mock):
     addon = addon_factory()
     abuse_report = AbuseReport.objects.create(
-        guid=addon.guid, reason=AbuseReport.REASONS.ILLEGAL, message='This is bad'
+        guid=addon.guid,
+        reason=AbuseReport.REASONS.ILLEGAL,
+        message='This is bad',
+        illegal_category=ILLEGAL_CATEGORIES.OTHER,
+        illegal_subcategory=ILLEGAL_SUBCATEGORIES.OTHER,
     )
     assert not CinderJob.objects.exists()
     responses.add(
@@ -314,6 +351,8 @@ def test_addon_report_to_cinder_different_locale():
         reason=AbuseReport.REASONS.ILLEGAL,
         message='This is bad',
         application_locale='fr',
+        illegal_category=ILLEGAL_CATEGORIES.OTHER,
+        illegal_subcategory=ILLEGAL_SUBCATEGORIES.OTHER,
     )
     assert not CinderJob.objects.exists()
     responses.add(
@@ -340,6 +379,8 @@ def test_addon_report_to_cinder_different_locale():
                         'or contains content that '
                         'violates the law',
                         'considers_illegal': True,
+                        'illegal_category': 'STATEMENT_CATEGORY_OTHER',
+                        'illegal_subcategory': 'KEYWORD_OTHER',
                     },
                     'entity_type': 'amo_report',
                 }
@@ -388,10 +429,11 @@ def test_addon_report_to_cinder_different_locale():
 def test_addon_appeal_to_cinder_reporter(statsd_incr_mock):
     addon = addon_factory()
     cinder_job = CinderJob.objects.create(
-        decision=CinderDecision.objects.create(
+        decision=ContentDecision.objects.create(
             cinder_id='4815162342-abc',
             action=DECISION_ACTIONS.AMO_APPROVE,
             addon=addon,
+            action_date=datetime.now(),
         )
     )
     abuse_report = AbuseReport.objects.create(
@@ -400,6 +442,8 @@ def test_addon_appeal_to_cinder_reporter(statsd_incr_mock):
         reporter_name='It is me',
         reporter_email='m@r.io',
         cinder_job=cinder_job,
+        illegal_category=ILLEGAL_CATEGORIES.OTHER,
+        illegal_subcategory=ILLEGAL_SUBCATEGORIES.OTHER,
     )
     responses.add(
         responses.POST,
@@ -427,7 +471,7 @@ def test_addon_appeal_to_cinder_reporter(statsd_incr_mock):
         },
         'appealer_entity_type': 'amo_unauthenticated_reporter',
         'decision_to_appeal_id': '4815162342-abc',
-        'queue_slug': 'amo-env-listings',
+        'queue_slug': 'amo-escalations',
         'reasoning': 'I appeal',
     }
 
@@ -436,8 +480,7 @@ def test_addon_appeal_to_cinder_reporter(statsd_incr_mock):
     appeal_job = cinder_job.decision.appeal_job
     assert appeal_job.job_id == '2432615184-xyz'
     abuse_report.reload()
-    assert appeal_job == abuse_report.appellant_job
-    assert abuse_report.reporter_appeal_date
+    assert abuse_report.cinderappeal.decision == cinder_job.decision
 
     assert statsd_incr_mock.call_count == 1
     assert statsd_incr_mock.call_args[0] == ('abuse.tasks.appeal_to_cinder.success',)
@@ -448,10 +491,11 @@ def test_addon_appeal_to_cinder_reporter(statsd_incr_mock):
 def test_addon_appeal_to_cinder_reporter_exception(statsd_incr_mock):
     addon = addon_factory()
     cinder_job = CinderJob.objects.create(
-        decision=CinderDecision.objects.create(
+        decision=ContentDecision.objects.create(
             cinder_id='4815162342-abc',
             action=DECISION_ACTIONS.AMO_APPROVE,
             addon=addon,
+            action_date=datetime.now(),
         )
     )
     abuse_report = AbuseReport.objects.create(
@@ -460,6 +504,8 @@ def test_addon_appeal_to_cinder_reporter_exception(statsd_incr_mock):
         reporter_name='It is me',
         reporter_email='m@r.io',
         cinder_job=cinder_job,
+        illegal_category=ILLEGAL_CATEGORIES.OTHER,
+        illegal_subcategory=ILLEGAL_SUBCATEGORIES.OTHER,
     )
     responses.add(
         responses.POST,
@@ -487,10 +533,11 @@ def test_addon_appeal_to_cinder_authenticated_reporter():
     user = user_factory(fxa_id='fake-fxa-id')
     addon = addon_factory()
     cinder_job = CinderJob.objects.create(
-        decision=CinderDecision.objects.create(
+        decision=ContentDecision.objects.create(
             cinder_id='4815162342-abc',
             action=DECISION_ACTIONS.AMO_APPROVE,
             addon=addon,
+            action_date=datetime.now(),
         )
     )
     abuse_report = AbuseReport.objects.create(
@@ -498,6 +545,8 @@ def test_addon_appeal_to_cinder_authenticated_reporter():
         reason=AbuseReport.REASONS.ILLEGAL,
         cinder_job=cinder_job,
         reporter=user,
+        illegal_category=ILLEGAL_CATEGORIES.OTHER,
+        illegal_subcategory=ILLEGAL_SUBCATEGORIES.OTHER,
     )
     responses.add(
         responses.POST,
@@ -526,7 +575,7 @@ def test_addon_appeal_to_cinder_authenticated_reporter():
         },
         'appealer_entity_type': 'amo_user',
         'decision_to_appeal_id': '4815162342-abc',
-        'queue_slug': 'amo-env-listings',
+        'queue_slug': 'amo-escalations',
         'reasoning': 'I appeal',
     }
 
@@ -535,18 +584,19 @@ def test_addon_appeal_to_cinder_authenticated_reporter():
     appeal_job = cinder_job.decision.appeal_job
     assert appeal_job.job_id == '2432615184-xyz'
     abuse_report.reload()
-    assert abuse_report.appellant_job == appeal_job
-    assert abuse_report.reporter_appeal_date
+    assert abuse_report.cinderappeal.decision == cinder_job.decision
 
 
 @pytest.mark.django_db
 def test_addon_appeal_to_cinder_authenticated_author():
     user = user_factory(fxa_id='fake-fxa-id')
+    user_factory(pk=settings.TASK_USER_ID)
     addon = addon_factory(users=[user])
-    decision = CinderDecision.objects.create(
+    decision = ContentDecision.objects.create(
         cinder_id='4815162342-abc',
         action=DECISION_ACTIONS.AMO_DISABLE_ADDON,
         addon=addon,
+        action_date=datetime.now(),
     )
     responses.add(
         responses.POST,
@@ -586,8 +636,7 @@ def test_addon_appeal_to_cinder_authenticated_author():
 
 
 @pytest.mark.django_db
-@mock.patch('olympia.abuse.tasks.statsd.incr')
-def test_resolve_job_in_cinder(statsd_incr_mock):
+def test_report_decision_to_cinder_and_notify_with_job():
     cinder_job = CinderJob.objects.create(job_id='999')
     abuse_report = AbuseReport.objects.create(
         guid=addon_factory().guid,
@@ -598,155 +647,111 @@ def test_resolve_job_in_cinder(statsd_incr_mock):
     responses.add(
         responses.POST,
         f'{settings.CINDER_SERVER_URL}jobs/{cinder_job.job_id}/decision',
-        json={'uuid': '123'},
+        json={'uuid': uuid.uuid4().hex},
         status=201,
     )
-    statsd_incr_mock.reset_mock()
-    review_action_reason = ReviewActionReason.objects.create(
-        cinder_policy=CinderPolicy.objects.create(name='policy', uuid='12345678')
+
+    cinder_policy = CinderPolicy.objects.create(name='policy', uuid='12345678')
+    decision = ContentDecision.objects.create(
+        addon=abuse_report.addon,
+        action=DECISION_ACTIONS.AMO_DISABLE_ADDON,
+        action_date=datetime.now(),
+        notes='some review text',
     )
-    log_entry = ActivityLog.objects.create(
+    decision.policies.add(cinder_policy)
+    cinder_job.update(decision=decision)
+    ActivityLog.objects.create(
         amo.LOG.FORCE_DISABLE,
-        abuse_report.target,
-        abuse_report.target.current_version,
-        review_action_reason,
+        decision.addon,
+        decision.addon.current_version,
+        decision,
+        cinder_policy,
         details={'comments': 'some review text'},
         user=user_factory(),
     )
 
-    resolve_job_in_cinder.delay(
-        cinder_job_id=cinder_job.id,
-        log_entry_id=log_entry.id,
-    )
+    with mock.patch('olympia.abuse.tasks.statsd.incr') as statsd_incr_mock:
+        report_decision_to_cinder_and_notify.delay(decision_id=decision.id)
 
     request = responses.calls[0].request
     request_body = json.loads(request.body)
     assert request_body['policy_uuids'] == ['12345678']
     assert request_body['reasoning'] == 'some review text'
-    cinder_job.reload()
-    assert cinder_job.decision.action == DECISION_ACTIONS.AMO_DISABLE_ADDON
+    assert 'entity' not in request_body
 
     assert statsd_incr_mock.call_count == 1
     assert statsd_incr_mock.call_args[0] == (
-        'abuse.tasks.resolve_job_in_cinder.success',
+        'abuse.tasks.report_decision_to_cinder_and_notify.success',
     )
 
 
 @pytest.mark.django_db
-@mock.patch('olympia.abuse.tasks.statsd.incr')
-def test_resolve_job_in_cinder_exception(statsd_incr_mock):
-    cinder_job = CinderJob.objects.create(job_id='999')
-    abuse_report = AbuseReport.objects.create(
-        guid=addon_factory().guid,
-        reason=AbuseReport.REASONS.POLICY_VIOLATION,
-        location=AbuseReport.LOCATION.AMO,
-        cinder_job=cinder_job,
-    )
-    responses.add(
-        responses.POST,
-        f'{settings.CINDER_SERVER_URL}jobs/999/decision',
-        json={'uuid': '123'},
-        status=500,
-    )
-    log_entry = ActivityLog.objects.create(
-        amo.LOG.FORCE_DISABLE,
-        abuse_report.target,
-        abuse_report.target.current_version,
-        ReviewActionReason.objects.create(
-            cinder_policy=CinderPolicy.objects.create(name='policy', uuid='12345678')
-        ),
-        details={'comments': 'some review text'},
-        user=user_factory(),
-    )
-    statsd_incr_mock.reset_mock()
-
-    with pytest.raises(ConnectionError):
-        resolve_job_in_cinder.delay(
-            cinder_job_id=cinder_job.id,
-            log_entry_id=log_entry.id,
-        )
-
-    assert statsd_incr_mock.call_count == 1
-    assert statsd_incr_mock.call_args[0] == (
-        'abuse.tasks.resolve_job_in_cinder.failure',
-    )
-
-
-@pytest.mark.django_db
-@mock.patch('olympia.abuse.tasks.statsd.incr')
-def test_notify_addon_decision_to_cinder(statsd_incr_mock):
+def test_report_decision_to_cinder_and_notify():
     responses.add(
         responses.POST,
         f'{settings.CINDER_SERVER_URL}create_decision',
-        json={'uuid': '123'},
+        json={'uuid': uuid.uuid4().hex},
         status=201,
     )
-    addon = addon_factory()
-    statsd_incr_mock.reset_mock()
-    review_action_reason = ReviewActionReason.objects.create(
-        cinder_policy=CinderPolicy.objects.create(name='policy', uuid='12345678')
+    cinder_policy = CinderPolicy.objects.create(name='policy', uuid='12345678')
+    decision = ContentDecision.objects.create(
+        addon=addon_factory(),
+        action=DECISION_ACTIONS.AMO_DISABLE_ADDON,
+        action_date=datetime.now(),
+        notes='some review text',
     )
-    log_entry = ActivityLog.objects.create(
+    decision.policies.add(cinder_policy)
+    ActivityLog.objects.create(
         amo.LOG.FORCE_DISABLE,
-        addon,
-        addon.current_version,
-        review_action_reason,
+        decision.addon,
+        decision.addon.current_version,
+        decision,
+        cinder_policy,
         details={'comments': 'some review text'},
         user=user_factory(),
     )
 
-    notify_addon_decision_to_cinder.delay(
-        log_entry_id=log_entry.id,
-        addon_id=addon.id,
-    )
+    with mock.patch('olympia.abuse.tasks.statsd.incr') as statsd_incr_mock:
+        report_decision_to_cinder_and_notify.delay(decision_id=decision.id)
 
     request = responses.calls[0].request
     request_body = json.loads(request.body)
     assert request_body['policy_uuids'] == ['12345678']
     assert request_body['reasoning'] == 'some review text'
-    assert request_body['entity']['id'] == str(addon.id)
-    assert CinderDecision.objects.get().action == DECISION_ACTIONS.AMO_DISABLE_ADDON
+    assert request_body['entity']['id'] == str(decision.addon_id)
 
     assert statsd_incr_mock.call_count == 1
     assert statsd_incr_mock.call_args[0] == (
-        'abuse.tasks.notify_addon_decision_to_cinder.success',
+        'abuse.tasks.report_decision_to_cinder_and_notify.success',
     )
 
 
 @pytest.mark.django_db
 @mock.patch('olympia.abuse.tasks.statsd.incr')
-def test_notify_addon_decision_to_cinder_exception(statsd_incr_mock):
-    addon = addon_factory()
+def test_report_decision_to_cinder_and_notify_exception(statsd_incr_mock):
     responses.add(
         responses.POST,
         f'{settings.CINDER_SERVER_URL}create_decision',
-        json={'uuid': '123'},
+        json={'uuid': uuid.uuid4().hex},
         status=500,
     )
-    log_entry = ActivityLog.objects.create(
-        amo.LOG.FORCE_DISABLE,
-        addon,
-        addon.current_version,
-        ReviewActionReason.objects.create(
-            cinder_policy=CinderPolicy.objects.create(name='policy', uuid='12345678')
-        ),
-        details={'comments': 'some review text'},
-        user=user_factory(),
+    decision = ContentDecision.objects.create(
+        addon=addon_factory(),
+        action=DECISION_ACTIONS.AMO_REJECT_VERSION_ADDON,
+        action_date=datetime.now(),
+        notes='some review text',
     )
     statsd_incr_mock.reset_mock()
 
     with pytest.raises(ConnectionError):
-        notify_addon_decision_to_cinder.delay(
-            log_entry_id=log_entry.id, addon_id=addon.id
-        )
+        report_decision_to_cinder_and_notify.delay(decision_id=decision.id)
 
     assert statsd_incr_mock.call_count == 1
     assert statsd_incr_mock.call_args[0] == (
-        'abuse.tasks.notify_addon_decision_to_cinder.failure',
+        'abuse.tasks.report_decision_to_cinder_and_notify.failure',
     )
 
 
-@pytest.mark.django_db
 class TestSyncCinderPolicies(TestCase):
     def setUp(self):
         self.url = f'{settings.CINDER_SERVER_URL}policies'
@@ -845,3 +850,195 @@ class TestSyncCinderPolicies(TestCase):
         another_policy = CinderPolicy.objects.get(uuid='another-uuid')
         assert another_policy.name == 'Another Pôlicy'
         assert another_policy.text == 'Another description'
+
+    def test_old_unused_policies_deleted_and_used_kept_and_marked_as_orphaned(self):
+        CinderPolicy.objects.create(
+            uuid='old-uuid',
+            name='old',
+            text='Old policy with no decisions or reasons',
+        )
+        old_policy_with_decision = CinderPolicy.objects.create(
+            uuid='old-uuid-decision',
+            name='old-decision',
+            text='Old policy, but with linked decision',
+        )
+        old_policy_with_decision.update(modified=days_ago(1))
+        decision = ContentDecision.objects.create(
+            action=DECISION_ACTIONS.AMO_APPROVE, addon=addon_factory()
+        )
+        decision.policies.add(old_policy_with_decision)
+        old_policy_with_reason = CinderPolicy.objects.create(
+            uuid='old-uuid-reason',
+            name='old-reason',
+            text='Old policy, but with linked ReviewActionReason',
+        )
+        old_policy_with_reason.update(modified=days_ago(1))
+        ReviewActionReason.objects.create(
+            name='a review reason',
+            cinder_policy=old_policy_with_reason,
+            canned_response='.',
+        )
+        existing_policy_exposed = CinderPolicy.objects.create(
+            uuid='existing-uuid-exposed',
+            name='Existing policy',
+            text='Existing policy with no decision or ReviewActionReason but exposed',
+            expose_in_reviewer_tools=True,
+        )
+        updated_policy = CinderPolicy.objects.create(
+            uuid=self.policy['uuid'],
+            name=self.policy['name'],
+            text='Existing policy with no decision or ReviewActionReason but updated',
+        )
+        responses.add(responses.GET, self.url, json=[self.policy], status=200)
+
+        sync_cinder_policies()
+        assert CinderPolicy.objects.filter(uuid='test-uuid').exists()
+        assert updated_policy.reload().present_in_cinder is True
+
+        assert CinderPolicy.objects.filter(uuid='old-uuid-decision').exists()
+        assert old_policy_with_decision.reload().present_in_cinder is False
+
+        assert CinderPolicy.objects.filter(uuid='old-uuid-reason').exists()
+        assert old_policy_with_reason.reload().present_in_cinder is False
+
+        assert CinderPolicy.objects.filter(uuid='existing-uuid-exposed').exists()
+        assert existing_policy_exposed.reload().present_in_cinder is False
+
+        assert not CinderPolicy.objects.filter(uuid='old-uuid').exists()
+
+    def test_nested_policies_considered_for_deletion_and_marking_orphans(self):
+        self.policy = {
+            'uuid': 'test-uuid',
+            'name': 'test-name',
+            'description': 'test-description',
+            'nested_policies': [
+                {
+                    'uuid': 'test-uuid-nested',
+                    'name': 'test-name-nested',
+                    'description': 'test-description-nested',
+                    'nested_policies': [],
+                }
+            ],
+        }
+        updated_nested_policy = CinderPolicy.objects.create(
+            uuid='test-uuid-nested',
+            name='test-name-nested',
+            text='nested policy synced from cinder',
+        )
+        responses.add(responses.GET, self.url, json=[self.policy], status=200)
+
+        sync_cinder_policies()
+        assert CinderPolicy.objects.filter(uuid='test-uuid-nested').exists()
+        assert updated_nested_policy.reload().present_in_cinder is True
+
+    def test_only_amo_labelled_policies_added(self):
+        data = [
+            {
+                'uuid': uuid.uuid4().hex,
+                'name': 'MoSo labeled',
+                'description': 'SKIPPED',
+                'labels': [{'name': 'MoSo'}],
+                'nested_policies': [
+                    {
+                        'uuid': uuid.uuid4().hex,
+                        'name': 'Nested under MoSo, No label',
+                        'description': 'SKIPPED',
+                    },
+                    {
+                        'uuid': uuid.uuid4().hex,
+                        'name': 'Nested under MoSo, AMO labeled',
+                        'description': 'SKIPPED',
+                        'labels': [{'name': 'AMO'}],
+                    },
+                ],
+            },
+            {
+                'uuid': uuid.uuid4().hex,
+                'name': 'No label',
+                'description': 'ADDED',
+                'nested_policies': [
+                    {
+                        'uuid': uuid.uuid4().hex,
+                        'name': 'Nested under no label, no label',
+                        'description': 'ADDED',
+                    },
+                    {
+                        'uuid': uuid.uuid4().hex,
+                        'name': 'Nested under no label, MoSo labeled',
+                        'description': 'SKIPPED',
+                        'labels': [{'name': 'MoSo'}],
+                    },
+                ],
+            },
+            {
+                'uuid': uuid.uuid4().hex,
+                'name': 'AMO labeled',
+                'description': 'ADDED',
+                'labels': [{'name': 'AMO'}],
+                'nested_policies': [
+                    {
+                        'uuid': uuid.uuid4().hex,
+                        'name': 'Nested under AMO label',
+                        'description': 'ADDED',
+                    },
+                    {
+                        'uuid': uuid.uuid4().hex,
+                        'name': 'Nested under AMO label, MoSo labeled',
+                        'description': 'SKIPPED',
+                        'labels': [{'name': 'MoSo'}],
+                    },
+                ],
+            },
+            {
+                'uuid': uuid.uuid4().hex,
+                'name': 'AMO & MoSo labeled',
+                'description': 'ADDED',
+                'labels': [{'name': 'AMO'}, {'name': 'MoSo'}],
+                'nested_policies': [
+                    {
+                        'uuid': uuid.uuid4().hex,
+                        'name': 'Nested under two labels',
+                        'description': 'ADDED',
+                    },
+                    {
+                        'uuid': uuid.uuid4().hex,
+                        'name': 'Nested under two label, MoSo labeled',
+                        'description': 'SKIPPED',
+                        'labels': [{'name': 'MoSo'}],
+                    },
+                ],
+            },
+        ]
+        responses.add(responses.GET, self.url, json=data, status=200)
+
+        sync_cinder_policies()
+        assert CinderPolicy.objects.count() == 6
+        assert CinderPolicy.objects.filter(text='ADDED').count() == 6
+
+
+@pytest.mark.django_db
+def test_handle_escalate_action():
+    addon = addon_factory()
+    decision = ContentDecision.objects.create(
+        action=DECISION_ACTIONS.AMO_ESCALATE_ADDON, addon=addon, notes='blah'
+    )
+    job = CinderJob.objects.create(job_id='1234', target_addon=addon, decision=decision)
+    report = AbuseReport.objects.create(guid=addon.guid, cinder_job=job)
+    assert not job.resolvable_in_reviewer_tools
+    responses.add(
+        responses.POST,
+        f'{settings.CINDER_SERVER_URL}create_report',
+        json={'job_id': '5678'},
+        status=201,
+    )
+
+    handle_escalate_action(job_pk=job.pk)
+
+    job.reload()
+    new_job = job.forwarded_to_job
+    assert new_job.job_id == '5678'
+    assert list(new_job.forwarded_from_jobs.all()) == [job]
+    assert new_job.resolvable_in_reviewer_tools
+    assert new_job.target_addon == addon
+    assert report.reload().cinder_job == new_job
+    assert json.loads(responses.calls[0].request.body)['reasoning'] == 'blah'

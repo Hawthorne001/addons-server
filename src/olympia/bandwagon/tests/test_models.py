@@ -37,9 +37,11 @@ class TestCollections(TestCase):
             description='<a href="http://example.com">example.com</a> '
             'http://example.com <b>foo</b> some text lol.com'
         )
-        # All markup kept (since this is a text field, not parsing HTML, clients will
-        # escape it), but URLs are removed.
-        assert str(collection.description) == '<a href=""></a>  <b>foo</b> some text'
+        # Escapes all HTML.
+        assert (
+            str(collection.description)
+            == '&lt;a href="  &lt;b&gt;foo&lt;/b&gt; some text lol.com'
+        )
 
     def test_translation_default(self):
         """Make sure we're getting strings from the default locale."""

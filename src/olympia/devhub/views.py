@@ -10,7 +10,7 @@ from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage as storage
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, F, Func, OuterRef, Subquery
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template import loader
@@ -34,6 +34,7 @@ from olympia.accounts.utils import (
 )
 from olympia.accounts.views import logout_user
 from olympia.activity.models import ActivityLog, CommentLog
+from olympia.addons.decorators import require_submissions_enabled
 from olympia.addons.models import (
     Addon,
     AddonReviewerFlags,
@@ -53,7 +54,6 @@ from olympia.amo.utils import (
     send_mail,
     send_mail_jinja,
 )
-from olympia.api.models import APIKey, APIKeyConfirmation
 from olympia.devhub.decorators import (
     dev_required,
     no_admin_disabled,
@@ -69,8 +69,8 @@ from olympia.files.models import File, FileUpload
 from olympia.files.utils import parse_addon
 from olympia.reviewers.forms import PublicWhiteboardForm
 from olympia.reviewers.models import Whiteboard
-from olympia.reviewers.templatetags.code_manager import code_manager_url
 from olympia.reviewers.utils import ReviewHelper
+from olympia.translations.models import PurifiedTranslation
 from olympia.users.models import (
     DeveloperAgreementRestriction,
     SuppressedEmailVerification,
@@ -101,8 +101,8 @@ MDN_BASE = 'https://developer.mozilla.org/en-US/Add-ons'
 def get_fileupload_by_uuid_or_40x(value, *, user):
     try:
         UUID(value)
-    except ValueError:
-        raise http.Http404()
+    except ValueError as exc:
+        raise http.Http404() from exc
     upload = get_object_or_404(FileUpload, uuid=value)
     if upload.user != user:
         raise PermissionDenied
@@ -546,6 +546,7 @@ def ownership(request, addon_id, addon):
             license_form.save()
         if policy_form and policy_form in fs:
             policy_form.save()
+            ActivityLog.objects.create(amo.LOG.EDIT_PROPERTIES, addon)
         messages.success(request, gettext('Changes successfully saved.'))
 
         existing_authors_emails = list(addon.authors.values_list('email', flat=True))
@@ -568,6 +569,7 @@ def validate_addon(request):
         context={
             'title': gettext('Validate Add-on'),
             'new_addon_form': forms.DistributionChoiceForm(),
+            'max_upload_size': settings.MAX_UPLOAD_SIZE,
         },
     )
 
@@ -606,6 +608,7 @@ def handle_upload(
 
 @login_required
 @post_required
+@require_submissions_enabled
 def upload(request, channel='listed', addon=None, is_standalone=False):
     channel_as_text = channel
     channel = amo.CHANNEL_CHOICES_LOOKUP[channel]
@@ -701,15 +704,9 @@ def file_validation(request, addon_id, addon, file_id):
     file_ = get_object_or_404(File, version__addon=addon, id=file_id)
 
     validate_url = reverse('devhub.json_file_validation', args=[addon.slug, file_.id])
-    file_url = (
-        code_manager_url('browse', addon_id=addon.pk, version_id=file_.version.pk)
-        if acl.is_user_any_kind_of_reviewer(request.user)
-        else None
-    )
 
     context = {
         'validate_url': validate_url,
-        'file_url': file_url,
         'file': file_,
         'filename': file_.pretty_filename,
         'timestamp': file_.created,
@@ -730,8 +727,8 @@ def json_file_validation(request, addon_id, addon, file_id):
     file = get_object_or_404(File, version__addon=addon, id=file_id)
     try:
         result = file.validation
-    except File.validation.RelatedObjectDoesNotExist:
-        raise http.Http404
+    except File.validation.RelatedObjectDoesNotExist as exc:
+        raise http.Http404 from exc
     return JsonResponse(
         {
             'validation': result.processed_validation,
@@ -964,6 +961,7 @@ def addons_section(request, addon_id, addon, section, editable=False):
         'whiteboard_form': whiteboard_form,
         'valid_slug': valid_slug,
         'supported_image_types': amo.SUPPORTED_IMAGE_TYPES,
+        'allowed_markdown': PurifiedTranslation.get_allowed_tags(),
     }
 
     return TemplateResponse(
@@ -1177,6 +1175,7 @@ def version_edit(request, addon_id, addon, version_id):
             'is_admin': is_admin,
             'choices': File.STATUS_CHOICES,
             'files': (version.file,),
+            'allowed_markdown': PurifiedTranslation.get_allowed_tags(),
         }
     )
 
@@ -1266,16 +1265,46 @@ def check_validation_override(request, form, addon, version):
 
 @dev_required
 def version_list(request, addon_id, addon):
-    qs = addon.versions.order_by('-created')
+    unread_count = (
+        (
+            ActivityLog.objects.all()
+            # There are 2 subquery: the one in pending_for_developer() to
+            # determine the date that determines whether an activity is pending
+            # or not, and then that queryset which is applied for each version.
+            # That means the version filtering needs to be applied twice: for
+            # both the date threshold (inner subquery, so the version id to
+            # refer to is the parent of the parent) and the unread count itself
+            # ("regular" subquery so the version id to refer to is just the
+            # parent).
+            .pending_for_developer(for_version=OuterRef(OuterRef('id')))
+            # pending_for_developer() evaluates the queryset it's called from
+            # so we have to apply our second filter w/ OuterRef *after* calling
+            # it, otherwise OuterRef would point to the wrong parent.
+            .filter(versionlog__version=OuterRef('id'))
+            .values('id')
+        )
+        .annotate(count=Func(F('id'), function='COUNT'))
+        .values('count')
+    )
+    qs = (
+        addon.versions.all()
+        .no_transforms()
+        .select_related('blockversion', 'file', 'file__validation')
+        .annotate(unread_count=Subquery(unread_count))
+        .order_by('-created')
+    )
     versions = amo_utils.paginate(request, qs)
     is_admin = acl.action_allowed_for(request.user, amo.permissions.REVIEWS_ADMIN)
 
     data = {
         'addon': addon,
-        'versions': versions,
-        'session_id': request.session.session_key,
-        'is_admin': is_admin,
+        'can_request_review': addon.can_request_review(),
+        'can_cancel': not addon.is_disabled and addon.status == amo.STATUS_NOMINATED,
         'comments_maxlength': CommentLog._meta.get_field('comments').max_length,
+        'is_admin': is_admin,
+        'can_submit': not addon.is_disabled,
+        'session_id': request.session.session_key,
+        'versions': versions,
     }
     return TemplateResponse(request, 'devhub/versions/list.html', context=data)
 
@@ -1459,7 +1488,13 @@ WIZARD_COLOR_FIELDS = [
 
 @transaction.atomic
 def _submit_upload(
-    request, addon, channel, next_view, wizard=False, theme_specific=False
+    request,
+    addon,
+    channel,
+    next_view,
+    wizard=False,
+    theme_specific=False,
+    include_recaptcha=False,
 ):
     """If this is a new addon upload `addon` will be None.
 
@@ -1470,7 +1505,11 @@ def _submit_upload(
         # "invisible" (disabled_by_user).
         return redirect('devhub.submit.version.distribution', addon.slug)
     form = forms.NewUploadForm(
-        request.POST or None, request.FILES or None, addon=addon, request=request
+        request.POST or None,
+        request.FILES or None,
+        addon=addon,
+        request=request,
+        include_recaptcha=include_recaptcha,
     )
     if wizard or (addon and addon.type == amo.ADDON_STATICTHEME):
         # If using the wizard or submitting a new version of a theme, we can
@@ -1536,7 +1575,15 @@ def _submit_upload(
         if existing_properties
         else []
     )
-    submit_notification_warning = get_config('submit_notification_warning')
+    flag = waffle.get_waffle_flag_model().get('enable-submissions')
+    warning = gettext('Add-on uploads are temporarily unavailable') + (
+        ': ' + flag.note if getattr(flag, 'note', None) else '.'
+    )
+    submit_notification_warning = (
+        warning
+        if not flag.is_active(request)
+        else get_config('submit_notification_warning')
+    )
     if not submit_notification_warning and addon:
         # If we're not showing the generic submit notification warning, show
         # one specific to pre review if the developer would be affected because
@@ -1573,6 +1620,8 @@ def _submit_upload(
             'unsupported_properties': unsupported_properties,
             'version_number': get_next_version_number(addon) if wizard else None,
             'wizard_url': wizard_url,
+            'max_upload_size': settings.MAX_UPLOAD_SIZE,
+            'submissions_enabled': flag.is_active(request),
         },
     )
 
@@ -1583,7 +1632,9 @@ def submit_addon_upload(request, channel):
     if not RestrictionChecker(request=request).is_submission_allowed():
         return redirect('devhub.submit.agreement')
     channel_id = amo.CHANNEL_CHOICES_LOOKUP[channel]
-    return _submit_upload(request, None, channel_id, 'devhub.submit.source')
+    return _submit_upload(
+        request, None, channel_id, 'devhub.submit.source', include_recaptcha=True
+    )
 
 
 @login_required
@@ -1703,6 +1754,7 @@ def _submit_source(request, addon, version, submit_page, next_view):
         'addon': addon,
         'version': version,
         'submit_page': submit_page,
+        'max_upload_size': settings.MAX_UPLOAD_SIZE,
     }
     if has_source and posting:
         log.info(
@@ -1732,6 +1784,7 @@ def submit_version_source(request, addon_id, addon, version_id):
     )
 
 
+@require_submissions_enabled
 def _submit_details(request, addon, version):
     static_theme = addon.type == amo.ADDON_STATICTHEME
     if version:
@@ -1758,6 +1811,7 @@ def _submit_details(request, addon, version):
         'version': version,
         'sources_provided': latest_version.sources_provided,
         'submit_page': 'version' if version else 'addon',
+        'allowed_markdown': PurifiedTranslation.get_allowed_tags(),
     }
 
     post_data = request.POST if request.method == 'POST' else None
@@ -1830,6 +1884,7 @@ def submit_version_details(request, addon_id, addon, version_id):
     return _submit_details(request, addon, version)
 
 
+@require_submissions_enabled
 def _submit_finish(request, addon, version):
     uploaded_version = version or addon.versions.latest()
 
@@ -1885,8 +1940,8 @@ def request_review(request, addon_id, addon):
     if latest_version:
         if latest_version.file.status == amo.STATUS_DISABLED:
             latest_version.file.update(status=amo.STATUS_AWAITING_REVIEW)
-        # Clear the due date so it gets set again in Addon.watch_status if nessecary.
-        latest_version.update(due_date=None)
+        # Clear the due date so it gets set again in Addon.watch_status if necessary.
+        latest_version.reset_due_date()
     if addon.has_complete_metadata():
         addon.update_status()
         messages.success(request, gettext('Review requested.'))
@@ -1975,66 +2030,51 @@ def api_key(request):
             % (reverse('devhub.developer_agreement'), '?to=', quote(request.path))
         )
 
-    try:
-        credentials = APIKey.get_jwt_key(user=request.user)
-    except APIKey.DoesNotExist:
-        credentials = None
+    form = forms.APIKeyForm(
+        request.POST if request.method == 'POST' else None,
+        request=request,
+    )
 
-    try:
-        confirmation = APIKeyConfirmation.objects.get(user=request.user)
-    except APIKeyConfirmation.DoesNotExist:
-        confirmation = None
+    if request.method == 'POST' and form.is_valid():
+        result = form.save()
 
-    if request.method == 'POST':
-        has_confirmed_or_is_confirming = confirmation and (
-            confirmation.confirmed_once
-            or confirmation.is_token_valid(request.POST.get('confirmation_token'))
-        )
-
-        # Revoking credentials happens regardless of action, if there were
-        # credentials in the first place.
-        if credentials and request.POST.get('action') in ('revoke', 'generate'):
-            credentials.update(is_active=None)
-            log.info(f'revoking JWT key for user: {request.user.id}, {credentials}')
-            send_key_revoked_email(request.user.email, credentials.key)
-            msg = gettext('Your old credentials were revoked and are no longer valid.')
-            messages.success(request, msg)
-
-        # If trying to generate with no confirmation instance, we don't
-        # generate the keys immediately but instead send you an email to
-        # confirm the generation of the key. This should only happen once per
-        # user, unless the instance is deleted by admins to reset the process
-        # for that user.
-        if confirmation is None and request.POST.get('action') == 'generate':
-            confirmation = APIKeyConfirmation.objects.create(
-                user=request.user, token=APIKeyConfirmation.generate_token()
+        if result.get('credentials_revoked'):
+            log.info(
+                f'revoking JWT key for user: {request.user.id}, {form.credentials}'
             )
-            confirmation.send_confirmation_email()
-        # If you have a confirmation instance, you need to either have it
-        # confirmed once already or have the valid token proving you received
-        # the email.
-        elif (
-            has_confirmed_or_is_confirming and request.POST.get('action') == 'generate'
-        ):
-            confirmation.update(confirmed_once=True)
-            new_credentials = APIKey.new_jwt_credentials(request.user)
-            log.info(f'new JWT key created: {new_credentials}')
-            send_key_change_email(request.user.email, new_credentials.key)
-        else:
-            # If we land here, either confirmation token is invalid, or action
-            # is invalid, or state is outdated (like user trying to revoke but
-            # there are already no credentials).
-            # We can just pass and let the redirect happen.
-            pass
+            send_key_revoked_email(request.user.email, form.credentials.key)
 
-        # In any case, redirect after POST.
+            # The user can revoke or regenerate.
+            # If not regenerating, skip the rest of the logic.
+            if not result.get('credentials_generated'):
+                msg = gettext(
+                    'Your old credentials were revoked and are no longer valid.'
+                )
+                messages.success(request, msg)
+                return redirect(reverse('devhub.api_key'))
+
+        if result.get('credentials_generated'):
+            new_credentials = form.credentials
+            log.info(f'new JWT key created: {new_credentials}')
+            send_key_change_email(request.user.email, new_credentials)
+
+        if result.get('confirmation_created'):
+            form.confirmation.send_confirmation_email()
+
         return redirect(reverse('devhub.api_key'))
+
+    if form.credentials is not None:
+        messages.error(
+            request,
+            _(
+                'Keep your API keys secret and never share them with anyone, '
+                'including Mozilla contributors.'
+            ),
+        )
 
     context_data = {
         'title': gettext('Manage API Keys'),
-        'credentials': credentials,
-        'confirmation': confirmation,
-        'token': request.GET.get('token'),  # For confirmation step.
+        'form': form,
     }
 
     return TemplateResponse(request, 'devhub/api/key.html', context=context_data)

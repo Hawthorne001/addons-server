@@ -47,10 +47,21 @@ $(document).ready(function () {
     initUploadPreview();
   });
 
+  // disable buttons if submission is explicitly disabled
+  const submissionField = $('#submission-field');
+  const submissionsDisabled =
+    submissionField && submissionField.data('submissions-enabled') === false;
+
+  $('.submission-buttons .button').toggleClass('disabled', submissionsDisabled);
+
   // Add-on uploader
   var $uploadAddon = $('#upload-addon');
   if ($('#upload-addon').length) {
-    var opt = { cancel: $('.upload-file-cancel') };
+    var opt = {
+      cancel: $('.upload-file-cancel'),
+      maxSize: $uploadAddon.data('max-upload-size'),
+      submissionsDisabled,
+    };
     opt.appendFormData = function (formData) {
       if ($('#addon-compat-upload').length) {
         formData.append('app_id', $('#id_application option:selected').val());
@@ -602,6 +613,12 @@ function initVersions() {
       date.attr('datetime', note['date']);
       date.attr('title', note['date']);
       clone.find('pre:contains("$comments")')[0].textContent = note['comments'];
+      if (note['attachment_url']) {
+        clone.find('.review-entry-attachment').removeClass('hidden');
+        clone.find('.attachment_url').attr('href', note['attachment_url']);
+        clone.find('.attachment_size')[0].textContent =
+          `(${note['attachment_size']})`;
+      }
       if (reverseOrder) {
         historyContainer.append(clone);
       } else {
@@ -1324,6 +1341,7 @@ function initSourceSubmitOutcomes() {
       }
     });
   });
+  $('#id_source').on('change', validateFileUploadSize);
 }
 
 function initSubmitModals() {

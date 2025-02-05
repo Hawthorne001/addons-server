@@ -1,6 +1,5 @@
 import hashlib
 import hmac
-from datetime import datetime, timezone
 
 from django import forms
 from django.conf import settings
@@ -21,7 +20,6 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 import olympia.core.logger
-from olympia.abuse.cinder import CinderAddonHandledByReviewers
 from olympia.abuse.tasks import appeal_to_cinder
 from olympia.accounts.utils import redirect_for_login
 from olympia.accounts.views import AccountViewSet
@@ -33,8 +31,9 @@ from olympia.core import set_user
 from olympia.ratings.views import RatingViewSet
 from olympia.users.models import UserProfile
 
+from .cinder import CinderAddon
 from .forms import AbuseAppealEmailForm, AbuseAppealForm
-from .models import AbuseReport, CinderDecision, CinderJob
+from .models import AbuseReport, CinderJob, ContentDecision
 from .serializers import (
     AddonAbuseReportSerializer,
     CollectionAbuseReportSerializer,
@@ -169,18 +168,6 @@ class CinderInboundPermission:
         return hmac.compare_digest(header, digest)
 
 
-def process_datestamp(date_string):
-    try:
-        return (
-            datetime.fromisoformat(date_string.replace(' ', ''))
-            .astimezone(timezone.utc)
-            .replace(tzinfo=None)
-        )
-    except ValueError:
-        log.warn('Invalid timestamp from cinder webhook %s', date_string)
-        return datetime.now()
-
-
 def filter_enforcement_actions(enforcement_actions, cinder_job):
     target = cinder_job.target
     if not target:
@@ -191,8 +178,85 @@ def filter_enforcement_actions(enforcement_actions, cinder_job):
         if DECISION_ACTIONS.has_api_value(action_slug)
         and (action := DECISION_ACTIONS.for_api_value(action_slug))
         and target.__class__
-        in CinderDecision.get_action_helper_class(action.value).valid_targets
+        in ContentDecision.get_action_helper_class(action.value).valid_targets
     ]
+
+
+def process_webhook_payload_decision(payload):
+    source = payload.get('source', {})
+    log.info('Valid Payload from AMO queue: %s', payload)
+    if 'job' in source:
+        job_id = source.get('job', {}).get('id', '')
+
+        try:
+            cinder_job = CinderJob.objects.get(job_id=job_id)
+        except CinderJob.DoesNotExist as exc:
+            log.debug('CinderJob instance not found for job id %s', job_id)
+            raise ValidationError('No matching job id found') from exc
+    else:
+        decision_id = payload.get('previous_decision', {}).get('id', '')
+
+        try:
+            decision = ContentDecision.objects.get(cinder_id=decision_id)
+        except ContentDecision.DoesNotExist as exc:
+            log.debug('ContentDecision instance not found for id %s', decision_id)
+            raise ValidationError('No matching decision id found') from exc
+
+        cinder_job = decision.originating_job
+        if not cinder_job:
+            log.debug('No job for ContentDecision with id %s', decision_id)
+            raise ValidationError('No matching job found for decision id')
+
+    if cinder_job.resolvable_in_reviewer_tools:
+        log.debug('Cinder webhook decision for reviewer resolvable job skipped.')
+        raise ValidationError('Decision already handled via reviewer tools')
+
+    enforcement_actions = filter_enforcement_actions(
+        payload.get('enforcement_actions') or [],
+        cinder_job,
+    )
+    policy_ids = [policy['id'] for policy in payload.get('policies', [])]
+
+    if len(enforcement_actions) != 1:
+        reason = (
+            'more than one supported enforcement_actions'
+            if enforcement_actions
+            else 'no supported enforcement_actions'
+        )
+        log.exception(
+            f'Cinder webhook request failed: {reason} [%s]',
+            payload.get('enforcement_actions'),
+        )
+        raise ValidationError(f'Payload invalid: {reason}')
+
+    cinder_job.process_decision(
+        decision_cinder_id=source.get('decision', {}).get('id'),
+        decision_action=enforcement_actions[0],
+        decision_notes=payload.get('notes') or '',
+        policy_ids=policy_ids,
+    )
+
+
+def process_webhook_payload_job_actioned(payload):
+    if (action := payload.get('action')) != 'escalated':
+        log.debug('Cinder webhook action was invalid (not "escalated")')
+        raise ValidationError(f'Unsupported action ({action}) for job.actioned')
+    job = payload.get('job', {})
+    entity = job.get('entity', {}).get('entity_schema')
+    if entity != CinderAddon.type:
+        log.debug('Cinder webhook entity_schema was not %s', CinderAddon.type)
+        raise ValidationError(f'Unsupported entity_schema ({entity}) for job.actioned')
+    job_id = job.get('id', '')
+
+    try:
+        cinder_job = CinderJob.objects.get(job_id=job_id)
+    except CinderJob.DoesNotExist as exc:
+        log.debug('CinderJob instance not found for job id %s', job_id)
+        raise ValidationError('No matching job id found') from exc
+
+    new_queue = payload.get('job', {}).get('queue', {}).get('slug')
+    notes = payload.get('notes', '')
+    cinder_job.process_queue_move(new_queue=new_queue, notes=notes)
 
 
 @api_view(['POST'])
@@ -204,56 +268,21 @@ def cinder_webhook(request):
     set_user(UserProfile.objects.get(pk=settings.TASK_USER_ID))
 
     try:
-        if request.data.get('event') != 'decision.created':
-            log.info('Non-decision payload received: %s', str(request.data)[:255])
-            raise ValidationError('Not a decision')
-
-        if not (payload := request.data.get('payload', {})):
-            log.info('No payload received: %s', str(request.data)[:255])
-            raise ValidationError('No payload')
-
-        source = payload.get('source', {})
-        job = source.get('job', {})
         if (
-            queue_name := job.get('queue', {}).get('slug')
-        ) == CinderAddonHandledByReviewers.queue:
-            log.info('Payload from queue handled by reviewers: %s', queue_name)
-            raise ValidationError('Queue handled by AMO reviewers')
-
-        log.info('Valid Payload from AMO queue: %s', payload)
-        job_id = job.get('id', '')
-
-        try:
-            cinder_job = CinderJob.objects.get(job_id=job_id)
-        except CinderJob.DoesNotExist:
-            log.debug('CinderJob instance not found for job id %s', job_id)
-            raise ValidationError('No matching job id found')
-
-        enforcement_actions = filter_enforcement_actions(
-            payload.get('enforcement_actions') or [],
-            cinder_job,
-        )
-        policy_ids = [policy['id'] for policy in payload.get('policies', [])]
-
-        if len(enforcement_actions) != 1:
-            reason = (
-                'more than one supported enforcement_actions'
-                if enforcement_actions
-                else 'no supported enforcement_actions'
-            )
-            log.exception(
-                f'Cinder webhook request failed: {reason} [%s]',
-                payload.get('enforcement_actions'),
-            )
-            raise ValidationError(f'Payload invalid: {reason}')
-
-        cinder_job.process_decision(
-            decision_cinder_id=source.get('decision', {}).get('id'),
-            decision_date=process_datestamp(payload.get('timestamp')),
-            decision_action=enforcement_actions[0],
-            decision_notes=payload.get('notes') or '',
-            policy_ids=policy_ids,
-        )
+            not (payload := request.data.get('payload', {}))
+            or not isinstance(payload, dict)
+            or not payload
+        ):
+            log.info('No payload dict received: %s', str(request.data)[:255])
+            raise ValidationError('No payload dict')
+        match event := request.data.get('event'):
+            case 'decision.created':
+                process_webhook_payload_decision(payload)
+            case 'job.actioned':
+                process_webhook_payload_job_actioned(payload)
+            case _:
+                log.info('Unsupported payload received: %s', str(request.data)[:255])
+                raise ValidationError(f'{event} is not a event we support')
 
     except ValidationError as exc:
         return Response(
@@ -279,7 +308,7 @@ def appeal(request, *, abuse_report_id, decision_cinder_id, **kwargs):
         DECISION_ACTIONS.APPEALABLE_BY_REPORTER.values
     )
     cinder_decision = get_object_or_404(
-        CinderDecision.objects.filter(action__in=appealable_decisions),
+        ContentDecision.objects.filter(action__in=appealable_decisions),
         cinder_id=decision_cinder_id,
     )
 
@@ -287,7 +316,7 @@ def appeal(request, *, abuse_report_id, decision_cinder_id, **kwargs):
         abuse_report = get_object_or_404(
             AbuseReport.objects.filter(cinder_job__isnull=False),
             id=abuse_report_id,
-            cinder_job=getattr(cinder_decision, 'cinder_job', None),
+            cinder_job=cinder_decision.originating_job,
         )
     else:
         abuse_report = None
@@ -387,9 +416,14 @@ def appeal(request, *, abuse_report_id, decision_cinder_id, **kwargs):
             # this point should only contain the hidden email input) if the
             # report can't be appealed. No form should be left on the page.
             context_data.pop('appeal_email_form', None)
-            if (
+            if hasattr(cinder_decision, 'overridden_by'):
+                # The reason we can't appeal this is that the decision has already been
+                # overriden by a new decision. We want a specific error message in this
+                # case.
+                context_data['appealed_decision_overridden'] = True
+            elif (
                 is_reporter
-                and not abuse_report.reporter_appeal_date
+                and not hasattr(abuse_report, 'cinderappeal')
                 and cinder_decision.appealed_decision_already_made()
             ):
                 # The reason we can't appeal this is that there was already an
@@ -397,7 +431,8 @@ def appeal(request, *, abuse_report_id, decision_cinder_id, **kwargs):
                 # error message in this case.
                 context_data['appealed_decision_already_made'] = True
                 context_data['appealed_decision_affirmed'] = (
-                    cinder_decision.appeal_job.decision.action == cinder_decision.action
+                    cinder_decision.appeal_job.final_decision.action
+                    == cinder_decision.action
                 )
 
     return TemplateResponse(request, 'abuse/appeal.html', context=context_data)

@@ -1,6 +1,7 @@
 import functools
 
 from django import forms
+from django.utils.decorators import method_decorator
 from django.utils.translation import gettext
 
 from rest_framework import status
@@ -11,6 +12,7 @@ from rest_framework.views import APIView
 import olympia.core.logger
 from olympia import amo
 from olympia.access import acl
+from olympia.addons.decorators import require_submissions_enabled
 from olympia.addons.models import Addon
 from olympia.addons.utils import (
     validate_version_number_is_gt_latest_signed_listed_version,
@@ -82,6 +84,7 @@ class VersionView(APIView):
     permission_classes = [IsAuthenticated, IsSubmissionAllowedFor]
     throttle_classes = addon_submission_throttles
 
+    @method_decorator(require_submissions_enabled)
     def post(self, request, *args, **kwargs):
         version_string = request.data.get('version', None)
 
@@ -98,6 +101,7 @@ class VersionView(APIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @with_addon(allow_missing=True)
+    @method_decorator(require_submissions_enabled)
     def put(self, request, addon, version_string, guid=None):
         try:
             file_upload, created = self.handle_upload(

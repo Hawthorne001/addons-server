@@ -724,6 +724,17 @@ th, td {
     padding: 0.308em 0.537em 0.214em 0.231em; /* 4px 7px 3px 7px */
 }
 
+.record-container {
+    display: flex;
+    justify-content: space-between;
+    gap: 2em;
+}
+
+div:has(> .download-reply-attachment) {
+    display: flex;
+    flex-direction: column;
+    text-align: right;
+}
 
 /** Button =Popups *********/
 .install {
@@ -3186,18 +3197,18 @@ input.ui-autocomplete-loading {
 }
 /* end l10n */
 
-/** "Some HTML Allowed" text/popup **/
-.html-support {
+/** "Some HTML/Markdown Allowed" text/popup **/
+.syntax-support {
     font-size: .9em;
     color: #003595;
     float: right;
 }
 
-.html-rtl .html-support {
+.html-rtl .syntax-support {
     float: left;
 }
 
-.html-support:hover {
+.syntax-support:hover {
     color: #000;
     cursor: help;
 }

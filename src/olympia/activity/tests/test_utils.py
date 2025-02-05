@@ -7,6 +7,7 @@ from unittest import mock
 
 from django.conf import settings
 from django.core import mail
+from django.core.files.base import ContentFile
 from django.urls import reverse
 
 import pytest
@@ -14,11 +15,15 @@ from waffle.testutils import override_switch
 
 from olympia import amo
 from olympia.access.models import Group
-from olympia.activity.models import MAX_TOKEN_USE_COUNT, ActivityLog, ActivityLogToken
+from olympia.activity.models import (
+    MAX_TOKEN_USE_COUNT,
+    ActivityLog,
+    ActivityLogToken,
+    AttachmentLog,
+)
 from olympia.activity.utils import (
     ACTIVITY_MAIL_GROUP,
     ADDON_REVIEWER_NAME,
-    NOTIFICATIONS_FROM_EMAIL,
     ActivityEmailEncodingError,
     ActivityEmailError,
     ActivityEmailParser,
@@ -188,23 +193,6 @@ class TestEmailBouncing(TestCase):
             {'ReplyTo': {'EmailAddress': 'bob@dole.org'}}
         )
 
-    def test_exception_to_notifications_alias(self):
-        email_text = copy.deepcopy(self.email_text)
-        email_text['To'] = [
-            {
-                'EmailAddress': 'notifications@%s' % settings.INBOUND_EMAIL_DOMAIN,
-                'FriendlyName': 'not a valid activity mail reply',
-            }
-        ]
-        assert not add_email_to_activity_log_wrapper(email_text, 0)
-        assert len(mail.outbox) == 1
-        out = mail.outbox[0]
-        assert (
-            'This email address is not meant to receive emails directly.'
-        ) in out.body
-        assert out.subject == 'Re: This is the subject of a test message.'
-        assert out.to == ['sender@example.com']
-
     @override_switch('activity-email-bouncing', active=False)
     def test_exception_but_bouncing_waffle_off(self):
         # Fails because the token doesn't exist in ActivityToken.objects
@@ -251,6 +239,7 @@ class TestAddEmailToActivityLog(TestCase):
 
     def test_developer_comment_existing_due_date(self):
         self.profile.addonuser_set.create(addon=self.addon)
+        self.version.needshumanreview_set.create()  # To force it to have a due date
         expected_due_date = datetime.now() + timedelta(days=1)
         self.version.update(due_date=expected_due_date)
         note = add_email_to_activity_log(self.parser)
@@ -345,6 +334,7 @@ class TestLogAndNotify(TestCase):
         author,
         is_from_developer=False,
         is_to_developer=False,
+        expect_attachment=False,
     ):
         subject = call[0][0]
         body = call[0][1]
@@ -360,6 +350,8 @@ class TestLogAndNotify(TestCase):
             assert ('%s wrote:' % ADDON_REVIEWER_NAME) in body
         else:
             assert ('%s wrote:' % author.name) in body
+        if expect_attachment:
+            assert 'An attachment was provided.' in body
 
     @mock.patch('olympia.activity.utils.send_mail')
     def test_developer_reply(self, send_mail_mock):
@@ -376,7 +368,7 @@ class TestLogAndNotify(TestCase):
         assert logs[0].details['comments'] == 'Thïs is á reply'
 
         assert send_mail_mock.call_count == 1  # One author.
-        sender = formataddr((self.developer.name, NOTIFICATIONS_FROM_EMAIL))
+        sender = formataddr((self.developer.name, settings.ADDONS_EMAIL))
         assert sender == send_mail_mock.call_args_list[0][1]['from_email']
         recipients = self._recipients(send_mail_mock)
         assert len(recipients) == 1
@@ -408,7 +400,7 @@ class TestLogAndNotify(TestCase):
         assert logs[0].details['comments'] == 'Thîs ïs a revïewer replyîng'
 
         assert send_mail_mock.call_count == 2  # Both authors.
-        sender = formataddr((ADDON_REVIEWER_NAME, NOTIFICATIONS_FROM_EMAIL))
+        sender = formataddr((ADDON_REVIEWER_NAME, settings.ADDONS_EMAIL))
         assert sender == send_mail_mock.call_args_list[0][1]['from_email']
         recipients = self._recipients(send_mail_mock)
         assert len(recipients) == 2
@@ -449,7 +441,7 @@ class TestLogAndNotify(TestCase):
         assert not logs[0].details  # No details json because no comment.
 
         assert send_mail_mock.call_count == 1  # One author.
-        sender = formataddr((self.developer.name, NOTIFICATIONS_FROM_EMAIL))
+        sender = formataddr((self.developer.name, settings.ADDONS_EMAIL))
         assert sender == send_mail_mock.call_args_list[0][1]['from_email']
         recipients = self._recipients(send_mail_mock)
         assert len(recipients) == 1
@@ -472,7 +464,7 @@ class TestLogAndNotify(TestCase):
         assert len(logs) == 1
 
         recipients = self._recipients(send_mail_mock)
-        sender = formataddr((self.developer.name, NOTIFICATIONS_FROM_EMAIL))
+        sender = formataddr((self.developer.name, settings.ADDONS_EMAIL))
         assert sender == send_mail_mock.call_args_list[0][1]['from_email']
         assert len(recipients) == 2
         # self.reviewer wasn't on the thread, but gets an email anyway.
@@ -582,9 +574,7 @@ class TestLogAndNotify(TestCase):
         comments = 'Thïs is á reply'
         log_and_notify(action, comments, self.developer, self.version)
 
-        sender = r'"mr \"quote\" escape" <notifications@%s>' % (
-            settings.INBOUND_EMAIL_DOMAIN
-        )
+        sender = r'"mr \"quote\" escape" <%s>' % (settings.ADDONS_EMAIL)
         assert sender == send_mail_mock.call_args_list[0][1]['from_email']
 
     @mock.patch('olympia.activity.utils.send_mail')
@@ -607,7 +597,7 @@ class TestLogAndNotify(TestCase):
         assert ActivityLog.objects.count() == 1  # No new activity created.
 
         assert send_mail_mock.call_count == 2  # Both authors.
-        sender = formataddr((ADDON_REVIEWER_NAME, NOTIFICATIONS_FROM_EMAIL))
+        sender = formataddr((ADDON_REVIEWER_NAME, settings.ADDONS_EMAIL))
         assert sender == send_mail_mock.call_args_list[0][1]['from_email']
         recipients = self._recipients(send_mail_mock)
         assert len(recipients) == 2
@@ -631,6 +621,36 @@ class TestLogAndNotify(TestCase):
             author=self.reviewer,
             is_from_developer=False,
             is_to_developer=True,
+        )
+
+    @mock.patch('olympia.activity.utils.send_mail')
+    def test_notify_about_attachment(self, send_mail_mock):
+        activity = self._create(amo.LOG.REVIEWER_REPLY_VERSION, self.reviewer)
+        AttachmentLog.objects.create(
+            activity_log=activity,
+            file=ContentFile('Pseudo File', name='attachment.txt'),
+        )
+        assert AttachmentLog.objects.count() == 1
+        notify_about_activity_log(self.addon, self.version, activity)
+        assert ActivityLog.objects.count() == 1
+
+        self._check_email(
+            send_mail_mock.call_args_list[0],
+            absolutify(self.addon.get_dev_url('versions')),
+            'you are listed as an author of this add-on.',
+            author=self.reviewer,
+            is_from_developer=False,
+            is_to_developer=True,
+            expect_attachment=True,
+        )
+        self._check_email(
+            send_mail_mock.call_args_list[1],
+            absolutify(self.addon.get_dev_url('versions')),
+            'you are listed as an author of this add-on.',
+            author=self.reviewer,
+            is_from_developer=False,
+            is_to_developer=True,
+            expect_attachment=True,
         )
 
 

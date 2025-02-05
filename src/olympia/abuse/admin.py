@@ -19,7 +19,7 @@ from olympia.amo.admin import AMOModelAdmin, DateRangeFilter, FakeChoicesMixin
 from olympia.ratings.models import Rating
 from olympia.translations.utils import truncate_text
 
-from .models import AbuseReport, CinderPolicy
+from .models import AbuseReport, CinderPolicy, ContentDecision
 from .tasks import sync_cinder_policies
 
 
@@ -151,6 +151,8 @@ class AbuseReportAdmin(AMOModelAdmin):
         'report_entry_point',
         'addon_card',
         'location',
+        'illegal_category',
+        'illegal_subcategory',
     )
     fieldsets = (
         ('Abuse Report Core Information', {'fields': ('reason', 'message')}),
@@ -178,6 +180,8 @@ class AbuseReportAdmin(AMOModelAdmin):
                     'addon_install_source_url',
                     'report_entry_point',
                     'location',
+                    'illegal_category',
+                    'illegal_subcategory',
                 )
             },
         ),
@@ -372,23 +376,28 @@ class CinderPolicyAdmin(AMOModelAdmin):
         'parent',
         'name',
         'text',
+        'expose_in_reviewer_tools',
+        'present_in_cinder',
+        'default_cinder_action',
     )
     list_display = (
-        'id',
         'uuid',
         'parent',
         'name',
         'linked_review_reasons',
+        'expose_in_reviewer_tools',
+        'present_in_cinder',
+        'default_cinder_action',
         'text',
+    )
+    readonly_fields = tuple(
+        set(fields) - {'expose_in_reviewer_tools', 'default_cinder_action'}
     )
     ordering = ('parent__name', 'name')
     list_select_related = ('parent',)
     view_on_site = False
 
     def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
         return False
 
     def has_delete_permission(self, request, obj=None):
@@ -441,5 +450,46 @@ class CinderPolicyAdmin(AMOModelAdmin):
         return HttpResponseRedirect(reverse('admin:abuse_cinderpolicy_changelist'))
 
 
+class ContentDecisionAdmin(AMOModelAdmin):
+    fields = (
+        'id',
+        'created',
+        'modified',
+        'addon',
+        'user',
+        'rating',
+        'collection',
+        'action',
+        'action_date',
+        'cinder_id',
+        'notes',
+        'policies',
+        'appeal_job',
+    )
+    list_display = (
+        'created',
+        'action',
+        'addon',
+        'user',
+        'rating',
+        'collection',
+    )
+    readonly_fields = fields
+    view_on_site = False
+
+    def has_add_permission(self, request):
+        # Adding new decisions through the admin is useless, so we prevent it.
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        # Decisions shouldn't be deleted - if they're wrong, they should be overridden.
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        # Decisions can't be changed - if they're wrong, they should be overridden.
+        return False
+
+
 admin.site.register(AbuseReport, AbuseReportAdmin)
 admin.site.register(CinderPolicy, CinderPolicyAdmin)
+admin.site.register(ContentDecision, ContentDecisionAdmin)

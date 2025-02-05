@@ -32,7 +32,7 @@
 
     <noscript><link rel="stylesheet" href="{{ static('css/legacy/nojs.css') }}"></noscript>
 
-    {% if settings.DEBUG %}
+    {% if settings.DEV_MODE %}
       {% if settings.LESS_LIVE_REFRESH %}
         <meta id="live_refresh" name="live_refresh" value="1">
       {% endif %}
@@ -43,7 +43,8 @@
       <meta name="csrf" content="{{ csrf_token }}">
     {% endif %}
 
-    {{ js('preload') }}
+    {{ js('jquery_base') }}
+    {{ vite_asset('js/preload.js') }}
   </head>
   <body class="html-{{ DIR }} {{ amo.FIREFOX.short }} moz-header-slim {% block bodyclass %}{% endblock %} restyle"
         data-app="{{ amo.FIREFOX.short }}"

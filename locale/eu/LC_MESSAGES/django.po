@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version:  messages.pootle\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-05-14 15:43+0000\n"
+"POT-Creation-Date: 2025-02-03 14:26+0000\n"
 "PO-Revision-Date: 2013-11-07 07:24+0000\n"
 "Last-Translator: Julen <julenx@gmail.com>\n"
 "Language-Team: librezale@librezale.org\n"
@@ -17,6 +17,9 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.2.0\n"
+
+msgid "Mozilla Add-ons: {} [{}]"
+msgstr ""
 
 msgid "Email address"
 msgstr ""
@@ -30,25 +33,16 @@ msgstr ""
 msgid "Please explain why you believe that this decision was made in error, and/or does not align with the applicable policy or law."
 msgstr ""
 
-msgid "Please ensure this field has no more than {max_length} characters."
-msgstr ""
-
-msgid "Invalid value"
+msgid "User profile"
 msgstr ""
 
 msgid "\"{}\" for {}"
 msgstr ""
 
-msgid "User profile"
+msgid "Please ensure this field has no more than {max_length} characters."
 msgstr ""
 
-msgid "Collection"
-msgstr ""
-
-msgid "Rating"
-msgstr "Balorazioa"
-
-msgid "Mozilla Add-ons: {} [{}]"
+msgid "Invalid value"
 msgstr ""
 
 msgid "Appeal reviewer decision"
@@ -73,6 +67,9 @@ msgstr ""
 msgid "Because the decision you are appealing has already been overturned, your appeal will not be processed."
 msgstr ""
 
+msgid "The decision you are appealing has already been overridden by a new decision, so this decision can't be appealed."
+msgstr ""
+
 msgid "This decision can't be appealed."
 msgstr ""
 
@@ -89,6 +86,7 @@ msgid ""
 "\n"
 "After reviewing your appeal, we determined that the previous decision, that this content does not violate Mozilla’s policies (%(policy_document_url)s), was correct. Based on that determination, we "
 "have denied your appeal, and will not take any action against the account or the content.\n"
+"%(manual_reasoning_text)s.\n"
 "\n"
 "Thank you for your attention.\n"
 msgstr ""
@@ -206,10 +204,10 @@ msgstr[1] "{0} bertsioa"
 msgid "Review note"
 msgstr "Berrikusi"
 
-msgid "Only latest versions of addons can have notes added."
+msgid "Request content length is too large."
 msgstr ""
 
-msgid "Request content length is too large."
+msgid "Add-on uploads are temporarily unavailable."
 msgstr ""
 
 msgid "Maximum number of categories per application ({MAX_CATEGORIES}) exceeded"
@@ -262,9 +260,6 @@ msgid "Listed"
 msgstr "Zerrendatuta"
 
 msgid "Add-on and collection paths need to end with \"/\""
-msgstr ""
-
-msgid "Previews cannot be created for themes."
 msgstr ""
 
 msgid "Built in licenses can not be updated."
@@ -351,6 +346,9 @@ msgstr ""
 msgid "This type of add-on does not allow custom compatibility."
 msgstr ""
 
+msgid "This endpoint is not valid for Themes."
+msgstr ""
+
 msgid "My Add-ons"
 msgstr "Nire gehigarriak"
 
@@ -410,6 +408,9 @@ msgid "CIDR"
 msgstr ""
 
 msgid "Some features are temporarily disabled while we perform website maintenance. We'll be back to full capacity shortly."
+msgstr ""
+
+msgid "URLs are not allowed."
 msgstr ""
 
 msgid "Must contain at least one printable character."
@@ -493,6 +494,12 @@ msgid "This feature is temporarily disabled while we perform website maintenance
 msgstr ""
 
 msgid "Some features on this page are temporarily disabled while we perform website maintenance. Please try again a little later."
+msgstr ""
+
+msgid "Add-on uploads temporarily disabled"
+msgstr ""
+
+msgid "Add-on uploads have been temporarily disabled. Please check back later."
 msgstr ""
 
 # {0} is the application the user is browsing.  Examples:  Thunderbird, Firefox,
@@ -591,6 +598,12 @@ msgstr "Ikonoak ezin dira animatuak izan."
 msgid "This add-on already belongs to the collection"
 msgstr "URLa beste bilduma batek darabil"
 
+msgid "Blocked"
+msgstr ""
+
+msgid "Restricted"
+msgstr ""
+
 msgid "{addon} was created."
 msgstr "{addon}: sortuta."
 
@@ -665,12 +678,6 @@ msgstr ""
 msgid "Retained"
 msgstr ""
 
-msgid "{addon} {version} escalated."
-msgstr ""
-
-msgid "Super review requested"
-msgstr ""
-
 msgid "{addon} {version} review requested."
 msgstr ""
 
@@ -683,15 +690,8 @@ msgstr ""
 msgid "More information requested"
 msgstr ""
 
-msgid "{addon} {version} super review requested."
-msgstr ""
-
 msgid "The add-on has been flagged for Admin Review. It's still in our review queue, but it will need to be checked by one of our admin reviewers. The review might take longer than usual."
 msgstr ""
-
-#, fuzzy
-msgid "Commented"
-msgstr "Iruzkina"
 
 msgid "{tag} added to {addon}."
 msgstr "{addon}: {tag} etiketa gehituta."
@@ -708,20 +708,6 @@ msgstr "{addon}: {collection} bildumatik kenduta."
 #, fuzzy
 msgid "{rating} for {addon} written."
 msgstr "{addon}: {review} berrikuspena idatzita."
-
-#. L10n: {0} is a category name.
-msgid "{addon} featured in {0}."
-msgstr "{addon}: {0} kategorian nabarmenduta."
-
-#. L10n: {0} is a category name.
-msgid "{addon} no longer featured in {0}."
-msgstr "{addon}: hemendik aurrera {0} kategorian ez dago nabarmenduta."
-
-msgid "{addon} is now featured."
-msgstr ""
-
-msgid "{addon} is no longer featured."
-msgstr ""
 
 # {0} is the count of files, a number
 # {1} is a status string like _('Public') or _('Incomplete')
@@ -776,15 +762,6 @@ msgstr ""
 msgid "Account {user} deleted."
 msgstr ""
 
-msgid "Created: {0}."
-msgstr ""
-
-msgid "Edited field: {2} set to: {0}."
-msgstr ""
-
-msgid "Deleted: {1}."
-msgstr ""
-
 #, fuzzy
 msgid "{rating} for {addon} updated."
 msgstr "{addon}: {review} berrikuspena onartuta."
@@ -792,31 +769,15 @@ msgstr "{addon}: {review} berrikuspena onartuta."
 msgid "{addon} reviewed."
 msgstr ""
 
-msgid "User {user} banned."
-msgstr ""
-
-msgid "User {user} picture deleted."
-msgstr ""
-
-msgid "User {user} added to {group}."
-msgstr ""
-
-msgid "User {user} removed from {group}."
-msgstr ""
-
 msgid "{addon} unlisted."
-msgstr ""
-
-msgid "{file} was signed."
 msgstr ""
 
 #. L10n: {0} is the add-on GUID.
 msgid "Add-on id {0} with GUID {1} has been deleted"
 msgstr ""
 
-#, fuzzy
-msgid "{addon} migrated from preliminary."
-msgstr "{addon}: {collection} bildumatik kenduta."
+msgid "{file} was signed."
+msgstr ""
 
 msgid "Reply by developer on {addon} {version}."
 msgstr ""
@@ -847,13 +808,6 @@ msgstr "{addon} gehigarriaren iturburu-kodearen lizentzia"
 msgid "Source code uploaded"
 msgstr "Iturburu-kodearen lizentzia"
 
-msgid "{addon} {version} auto-approval confirmed."
-msgstr ""
-
-#, fuzzy
-msgid "Auto-Approval confirmed"
-msgstr "Azken eguneraketa"
-
 #, fuzzy
 msgid "{addon} {version} re-enabled."
 msgstr "{addon}: sortuta."
@@ -863,50 +817,11 @@ msgid "{addon} {version} disabled."
 msgstr "{addon}: deskribapena editatuta."
 
 #, fuzzy
-msgid "{addon} {version} content approved."
-msgstr "{addon}: deskribapena editatuta."
-
-msgid "Content approved"
-msgstr ""
-
-#, fuzzy
 msgid "{addon} {version} content rejected."
 msgstr "{addon}: sortuta."
 
 msgid "Content rejected"
 msgstr ""
-
-#, fuzzy
-msgid "{addon} information request altered or removed by admin."
-msgstr "{addon}: deskribapena editatuta."
-
-#, fuzzy
-msgid "Information request altered"
-msgstr "Berrikusi"
-
-#, fuzzy
-msgid "Information request cleared by developer on {addon} {version}."
-msgstr "{addon}: {review} berrikuspena idatzita."
-
-#, fuzzy
-msgid "Information request removed"
-msgstr "Berrikusi"
-
-#, fuzzy
-msgid "{addon} {version} admin add-on-review requested."
-msgstr "{addon}: sortuta."
-
-#, fuzzy
-msgid "Admin add-on-review requested"
-msgstr "Berrikusi"
-
-#, fuzzy
-msgid "{addon} {version} admin content-review requested."
-msgstr "{addon}: sortuta."
-
-#, fuzzy
-msgid "Admin content-review requested"
-msgstr "Berrikusi"
 
 #, fuzzy
 msgid "{addon} {version} admin theme-review requested."
@@ -919,44 +834,6 @@ msgstr "Berrikusi"
 #, fuzzy
 msgid "{addon} was migrated from a lightweight theme."
 msgstr "{addon}: {collection} bildumatik kenduta."
-
-msgid "User {user} api key reset."
-msgstr ""
-
-msgid "Block for {0} added to Blocklist."
-msgstr ""
-
-msgid "Block added"
-msgstr ""
-
-msgid "Block for {0} edited in Blocklist."
-msgstr ""
-
-msgid "Block edited"
-msgstr ""
-
-#, fuzzy
-msgid "Block for {0} deleted from Blocklist."
-msgstr "{addon}: {0} bertsioa ezabatuta."
-
-msgid "Block deleted"
-msgstr ""
-
-msgid "GUID for {addon} added to DeniedGuid."
-msgstr ""
-
-#, fuzzy
-msgid "GUID for {addon} removed from DeniedGuid."
-msgstr "{addon}: {collection} bildumatik kenduta."
-
-msgid "Block {1} action for {0} signed off."
-msgstr ""
-
-msgid "Block action signoff"
-msgstr ""
-
-msgid "User {user} session(s) reset."
-msgstr ""
 
 #, fuzzy
 msgid "{addon} {version} content reject scheduled."
@@ -1000,24 +877,6 @@ msgstr ""
 msgid "Pending rejection cleared"
 msgstr ""
 
-msgid "{version} added to Blocklist."
-msgstr ""
-
-msgid "Version Blocked"
-msgstr ""
-
-msgid "{version} removed from Blocklist."
-msgstr ""
-
-msgid "Version Unblocked"
-msgstr ""
-
-msgid "{addon} {version} admin add-on-review cleared."
-msgstr ""
-
-msgid "Admin add-on-review cleared"
-msgstr ""
-
 msgid "{user_responsible} changed {addon} slug from {0} to {1}."
 msgstr ""
 
@@ -1033,10 +892,22 @@ msgstr ""
 msgid "Review {rating} for {addon} un-deleted."
 msgstr ""
 
-msgid "User {user} content restored."
+msgid "{addon} {version} rejected automatically after delay expired."
 msgstr ""
 
-msgid "User {user} unbanned."
+msgid "Rejected automatically after delay expired"
+msgstr ""
+
+msgid "{addon} {version} content rejected automatically after delay expired."
+msgstr ""
+
+msgid "Content rejected automatically after delay expired"
+msgstr ""
+
+msgid "{addon} {version} pending rejection changed."
+msgstr ""
+
+msgid "Pending rejection changed"
 msgstr ""
 
 msgid "Firefox"
@@ -1159,14 +1030,6 @@ msgid "Themes"
 msgstr "Gaiak"
 
 msgid "Deprecated Site Permissions"
-msgstr ""
-
-msgid "Accessibility"
-msgstr ""
-
-msgid ""
-"Download Firefox accessibility extensions to help you consume content and navigate online in ways that work best for you. Discover extensions that remove or reduce barriers to access by changing "
-"screen brightness, reading web pages aloud, providing precision magnification, and more."
 msgstr ""
 
 msgid "Alerts & Updates"
@@ -1354,25 +1217,32 @@ msgstr "Orokorra"
 msgid "Mozilla Public License 2.0"
 msgstr ""
 
-msgid "GNU General Public License v2.0"
+msgid "Apache License 2.0"
 msgstr ""
 
-msgid "GNU General Public License v3.0"
+msgid "GNU General Public License v2.0 only"
 msgstr ""
 
-msgid "GNU Library General Public License v2.1"
+msgid "GNU General Public License v3.0 only"
 msgstr ""
 
-msgid "GNU Library General Public License v3.0"
+msgid "GNU Lesser General Public License v2.1 only"
 msgstr ""
 
-#, fuzzy
-msgid "The MIT License"
-msgstr "Lizentzia"
+msgid "GNU Lesser General Public License v3.0 only"
+msgstr ""
 
-#, fuzzy
-msgid "The BSD License"
-msgstr "Lizentzia"
+msgid "GNU Affero General Public License v3.0 only"
+msgstr ""
+
+msgid "MIT License"
+msgstr ""
+
+msgid "ISC License"
+msgstr ""
+
+msgid "BSD 2-Clause \"Simplified\" License"
+msgstr ""
 
 msgid "Mozilla Public License 1.1"
 msgstr ""
@@ -1398,6 +1268,27 @@ msgstr ""
 msgid "Creative Commons Attribution-ShareAlike 3.0"
 msgstr ""
 
+msgid "Creative Commons Attribution 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-NonCommercial 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-NonCommercial-NoDerivs 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-NonCommercial-Share Alike 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-NoDerivs 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-ShareAlike 4.0"
+msgstr ""
+
+msgid "The Unlicense"
+msgstr ""
+
 #, fuzzy
 msgid "Not Promoted"
 msgstr "Puntuatu gabe oraindik"
@@ -1405,12 +1296,6 @@ msgstr "Puntuatu gabe oraindik"
 #, fuzzy
 msgid "Recommended"
 msgstr "Iruzkina"
-
-msgid "Sponsored"
-msgstr ""
-
-msgid "Verified"
-msgstr ""
 
 #, fuzzy
 msgid "By Firefox"
@@ -1662,6 +1547,41 @@ msgstr ""
 msgid "Display Name"
 msgstr ""
 
+msgid "Confirm email address"
+msgstr ""
+
+msgid "Generate new credentials"
+msgstr ""
+
+msgid "Revoke and regenerate credentials"
+msgstr ""
+
+msgid "Revoke"
+msgstr ""
+
+msgid "JWT issuer"
+msgstr ""
+
+msgid ""
+"To make API requests, send a <a href=\"{jwt_url}\">JSON Web Token (JWT)</a> as the authorization header. You'll need to generate a JWT for every request as explained in the <a "
+"href=\"{docs_url}\">API documentation</a>."
+msgstr ""
+
+msgid "JWT secret"
+msgstr ""
+
+msgid "Please click the confirm button below to generate API credentials for user <strong>{name}</strong>."
+msgstr ""
+
+msgid "A confirmation link will be sent to your email address. After confirmation you will find your API keys on this page."
+msgstr ""
+
+msgid "You don't have any API credentials."
+msgstr ""
+
+msgid "Something went wrong, please contact developer support."
+msgstr ""
+
 #, fuzzy
 msgid "Invalid or corrupt add-on file."
 msgstr "Artxibo baliogabea."
@@ -1693,6 +1613,9 @@ msgstr "Sortuta"
 
 msgid "Downloads"
 msgstr "Deskargak"
+
+msgid "Rating"
+msgstr "Balorazioa"
 
 msgid "All My Add-ons"
 msgstr ""
@@ -1829,6 +1752,9 @@ msgstr ""
 msgid "The highlight color of the active tab. Implemented as a border around the tab on Firefox 89+ and a line above the tab on older Firefoxes. Manifest field:  tab_line."
 msgstr ""
 
+msgid "Add-on uploads are temporarily unavailable"
+msgstr ""
+
 #, fuzzy
 msgid "Review requested."
 msgstr "Berrikusi"
@@ -1837,6 +1763,9 @@ msgid "You must provide further details to proceed."
 msgstr ""
 
 msgid "Your old credentials were revoked and are no longer valid."
+msgstr ""
+
+msgid "Keep your API keys secret and never share them with anyone, including Mozilla contributors."
 msgstr ""
 
 msgid "New API key created"
@@ -2714,6 +2643,10 @@ msgid "Source files (aside from open-source third party libraries) cannot be tra
 msgstr ""
 
 #, python-format
+msgid "The maximum file size accepted is %(max_size)s."
+msgstr ""
+
+#, python-format
 msgid "For more information, please read <a %(a_attrs)s>Source Code Submission</a> on Firefox Extension Workshop."
 msgstr ""
 
@@ -2739,6 +2672,10 @@ msgid "Upload Version"
 msgstr "Igo bertsio berria"
 
 msgid "Use the fields below to upload your add-on package. After upload, a series of automated validation tests will be run on your file."
+msgstr ""
+
+#, python-format
+msgid "The maximum file size accepted is %(max_size)s. If your add-on is larger than %(max_size)s, it will fail validation."
 msgstr ""
 
 msgid "Which applications is this version compatible with?"
@@ -2815,47 +2752,6 @@ msgid "Back"
 msgstr ""
 
 msgid "API Credentials"
-msgstr ""
-
-#, python-format
-msgid "For detailed instructions, consult the <a href=\"%(docs_url)s\">API documentation</a>."
-msgstr ""
-
-msgid "Keep your API keys secret and <strong>never share them with anyone</strong>, including Mozilla contributors."
-msgstr ""
-
-msgid "JWT issuer"
-msgstr ""
-
-msgid "JWT secret"
-msgstr ""
-
-#, python-format
-msgid ""
-"To make API requests, send a <a href=\"%(jwt_url)s\">JSON Web Token (JWT)</a> as the authorization header. You'll need to generate a JWT for every request as explained in the <a "
-"href=\"%(docs_url)s\">API documentation</a>."
-msgstr ""
-
-#, python-format
-msgid "Please click the confirm button below to generate API credentials for user <strong>%(name)s</strong>."
-msgstr ""
-
-msgid "A confirmation link will be sent to your email address. After confirmation you will find your API keys on this page."
-msgstr ""
-
-msgid "You don't have any API credentials."
-msgstr ""
-
-msgid "Revoke"
-msgstr ""
-
-msgid "Revoke and regenerate credentials"
-msgstr ""
-
-msgid "Confirm and generate new credentials"
-msgstr ""
-
-msgid "Generate new credentials"
 msgstr ""
 
 #, python-format
@@ -3072,13 +2968,13 @@ msgstr ""
 msgid "Sort by:"
 msgstr "Ordenatu:"
 
-#. %s is a list of HTML tags.
+#. %s is a list of markdown syntax.
 #, python-format
-msgid "Allowed HTML: %(allowed_html)s"
+msgid "Allowed Markdown: %(allowed_markdown)s"
 msgstr ""
 
-msgid "Some HTML supported."
-msgstr "HTML apur bat onartzen da."
+msgid "Some Markdown supported."
+msgstr ""
 
 msgid "Remove this application"
 msgstr "Kendu aplikazio hau"
@@ -3189,16 +3085,6 @@ msgstr ""
 
 msgid "Contribute"
 msgstr "Egin ekarpena"
-
-#, fuzzy
-msgid "Review Add-ons"
-msgstr "Berrikusi gehigarria"
-
-msgid "Volunteer reviewers help keep add-ons safe and reliable to use. They enjoy great perks too!"
-msgstr ""
-
-msgid "Join us!"
-msgstr ""
 
 msgid "Write Some Code"
 msgstr ""
@@ -4326,10 +4212,6 @@ msgid "Double-click any word to instantly see its definition."
 msgstr ""
 
 #. editorial content for the discovery pane.
-msgid "Blues & Yellows"
-msgstr ""
-
-#. editorial content for the discovery pane.
 #. editorial content for the primary hero shelves.
 msgid "Save batches of tabs as convenient bookmarks."
 msgstr ""
@@ -4389,6 +4271,10 @@ msgstr ""
 
 #. editorial content for the discovery pane.
 msgid "Change the way the web looks."
+msgstr ""
+
+#. editorial content for the discovery pane.
+msgid "Customize YouTube to taste. Give it a new look, new features & filter only the content you want."
 msgstr ""
 
 #. editorial content for the primary hero shelves.
@@ -4543,6 +4429,10 @@ msgstr ""
 msgid "Block time-wasting websites. Block them completely or just during time frames of your choosing."
 msgstr ""
 
+#. editorial content for the primary hero shelves.
+msgid "Easily summarize emails, docs, articles, and video transcripts in English across the web — without sacrificing your privacy."
+msgstr ""
+
 #. editorial content for the secondary hero shelves.
 msgid "Extensions are like apps for Firefox."
 msgstr ""
@@ -4557,15 +4447,16 @@ msgid "See all extensions"
 msgstr "Arakatu gehigarri guztiak"
 
 #. editorial content for the secondary hero shelves.
-msgid "Port Authority (Developer Spotlight)"
-msgstr ""
-
-#. editorial content for the secondary hero shelves.
 msgid "Privacy & Security extensions"
 msgstr ""
 
 #. editorial content for the secondary hero shelves.
-msgid "Fantastic tab managers"
+#. editorial content for the homepage shelves.
+msgid "Tab managers"
+msgstr ""
+
+#. editorial content for the secondary hero shelves.
+msgid "Spotlight: Adaptive Tab Bar Color"
 msgstr ""
 
 #. editorial content for the secondary hero shelves.
@@ -4649,10 +4540,6 @@ msgstr "Sare sozialak"
 #, fuzzy
 msgid "See more social streaming staff picks"
 msgstr "Arakatu gehigarri guztiak"
-
-#. editorial content for the homepage shelves.
-msgid "Tab managers"
-msgstr ""
 
 #. editorial content for the homepage shelves.
 #, fuzzy
@@ -4753,6 +4640,22 @@ msgstr ""
 msgid "See more download manager staff picks"
 msgstr ""
 
+#. editorial content for the homepage shelves.
+msgid "Accessibility extensions"
+msgstr ""
+
+#. editorial content for the homepage shelves.
+msgid "See more accessibility staff picks"
+msgstr ""
+
+#. editorial content for the homepage shelves.
+msgid "Extension starter pack"
+msgstr ""
+
+#. editorial content for the homepage shelves.
+msgid "See more starter extension staff picks"
+msgstr ""
+
 msgid "Unreviewed"
 msgstr ""
 
@@ -4766,10 +4669,7 @@ msgstr ""
 msgid "Could not parse the manifest file."
 msgstr ""
 
-msgid "Add-on ID is required for Firefox 47 and below."
-msgstr ""
-
-msgid "Lowest supported \"strict_min_version\" is 42.0."
+msgid "Lowest supported \"strict_min_version\" is {min_version}."
 msgstr ""
 
 msgid "Unknown \"strict_min_version\" {appver} for {app}"
@@ -4931,6 +4831,12 @@ msgstr ""
 
 #, python-format
 msgid "Rated %(rating)s out of 5 stars"
+msgstr ""
+
+msgid "Unsupported file type, please upload a file {extensions}."
+msgstr ""
+
+msgid "File too large."
 msgstr ""
 
 #, python-format

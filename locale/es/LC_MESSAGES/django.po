@@ -10,8 +10,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: messages\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-05-14 15:43+0000\n"
-"PO-Revision-Date: 2022-07-14 02:22+0000\n"
+"POT-Creation-Date: 2025-02-03 14:26+0000\n"
+"PO-Revision-Date: 2024-01-15 13:27+0000\n"
 "Last-Translator: Bund10z <abu.avila@gmail.com>\n"
 "Language-Team: Español (España) <nave@elistas.net>\n"
 "Language: es\n"
@@ -21,6 +21,9 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "Generated-By: Babel 2.2.0\n"
 "X-Generator: Pontoon\n"
+
+msgid "Mozilla Add-ons: {} [{}]"
+msgstr ""
 
 msgid "Email address"
 msgstr ""
@@ -34,25 +37,16 @@ msgstr ""
 msgid "Please explain why you believe that this decision was made in error, and/or does not align with the applicable policy or law."
 msgstr ""
 
-msgid "Please ensure this field has no more than {max_length} characters."
-msgstr "Asegúrate de que este campo no tiene más de {max_length} caracteres."
-
-msgid "Invalid value"
+msgid "User profile"
 msgstr ""
 
 msgid "\"{}\" for {}"
 msgstr ""
 
-msgid "User profile"
-msgstr ""
+msgid "Please ensure this field has no more than {max_length} characters."
+msgstr "Asegúrate de que este campo no tiene más de {max_length} caracteres."
 
-msgid "Collection"
-msgstr ""
-
-msgid "Rating"
-msgstr "Calificación"
-
-msgid "Mozilla Add-ons: {} [{}]"
+msgid "Invalid value"
 msgstr ""
 
 msgid "Appeal reviewer decision"
@@ -77,6 +71,9 @@ msgstr ""
 msgid "Because the decision you are appealing has already been overturned, your appeal will not be processed."
 msgstr ""
 
+msgid "The decision you are appealing has already been overridden by a new decision, so this decision can't be appealed."
+msgstr ""
+
 msgid "This decision can't be appealed."
 msgstr ""
 
@@ -93,6 +90,7 @@ msgid ""
 "\n"
 "After reviewing your appeal, we determined that the previous decision, that this content does not violate Mozilla’s policies (%(policy_document_url)s), was correct. Based on that determination, we "
 "have denied your appeal, and will not take any action against the account or the content.\n"
+"%(manual_reasoning_text)s.\n"
 "\n"
 "Thank you for your attention.\n"
 msgstr ""
@@ -209,10 +207,10 @@ msgstr[1] "Versión {0}"
 msgid "Review note"
 msgstr "Nota de revisión"
 
-msgid "Only latest versions of addons can have notes added."
-msgstr "Sólo se pueden añadir notas a las últimas versiones de los complementos."
-
 msgid "Request content length is too large."
+msgstr ""
+
+msgid "Add-on uploads are temporarily unavailable."
 msgstr ""
 
 msgid "Maximum number of categories per application ({MAX_CATEGORIES}) exceeded"
@@ -264,9 +262,6 @@ msgid "Listed"
 msgstr "Listado"
 
 msgid "Add-on and collection paths need to end with \"/\""
-msgstr ""
-
-msgid "Previews cannot be created for themes."
 msgstr ""
 
 msgid "Built in licenses can not be updated."
@@ -353,6 +348,9 @@ msgstr ""
 msgid "This type of add-on does not allow custom compatibility."
 msgstr ""
 
+msgid "This endpoint is not valid for Themes."
+msgstr ""
+
 msgid "My Add-ons"
 msgstr "Mis complementos"
 
@@ -412,6 +410,9 @@ msgstr "CIDR"
 
 msgid "Some features are temporarily disabled while we perform website maintenance. We'll be back to full capacity shortly."
 msgstr "Algunas características están temporalmente deshabilitadas mientras realizamos tareas de mantenimiento en la web. Volveremos a tener plena capacidad muy pronto."
+
+msgid "URLs are not allowed."
+msgstr ""
 
 msgid "Must contain at least one printable character."
 msgstr "Debe tener al menos un caracter imprimable."
@@ -509,6 +510,12 @@ msgstr "Esta opción está temporalmente deshabilitada mientras realizamos tarea
 msgid "Some features on this page are temporarily disabled while we perform website maintenance. Please try again a little later."
 msgstr "Algunas características están temporalmente deshabilitadas mientras realizamos tareas de mantenimiento en la web. Inténtalo de nuevo más tarde."
 
+msgid "Add-on uploads temporarily disabled"
+msgstr ""
+
+msgid "Add-on uploads have been temporarily disabled. Please check back later."
+msgstr ""
+
 # {0} is the application the user is browsing.  Examples:  Thunderbird,
 # Firefox,
 # Sunbird
@@ -601,6 +608,12 @@ msgstr "No se puede usar esta URL personalizada."
 msgid "This add-on already belongs to the collection"
 msgstr "Este complemento ya pertenece a la colección"
 
+msgid "Blocked"
+msgstr ""
+
+msgid "Restricted"
+msgstr ""
+
 msgid "{addon} was created."
 msgstr "{addon} ha sido creado."
 
@@ -674,12 +687,6 @@ msgstr "{addon} {version} ha sido retenido."
 msgid "Retained"
 msgstr "Retenido"
 
-msgid "{addon} {version} escalated."
-msgstr "{addon} {version} ha sido remitida por incidencias."
-
-msgid "Super review requested"
-msgstr "Solicitada superrevisión"
-
 msgid "{addon} {version} review requested."
 msgstr "Se ha solicitado la revisión de {addon} {version}."
 
@@ -692,14 +699,8 @@ msgstr "{addon} {version} necesita más información."
 msgid "More information requested"
 msgstr "Se ha solicitado más información"
 
-msgid "{addon} {version} super review requested."
-msgstr "Se ha solicitado la superrevisión de {addon} {version}."
-
 msgid "The add-on has been flagged for Admin Review. It's still in our review queue, but it will need to be checked by one of our admin reviewers. The review might take longer than usual."
 msgstr ""
-
-msgid "Commented"
-msgstr "Comentado"
 
 msgid "{tag} added to {addon}."
 msgstr "{tag} añadida a {addon}."
@@ -715,20 +716,6 @@ msgstr "{addon} eliminado de {collection}."
 
 msgid "{rating} for {addon} written."
 msgstr "Se otorgó un {rating} a {addon}."
-
-#. L10n: {0} is a category name.
-msgid "{addon} featured in {0}."
-msgstr "{addon} destacado en {0}."
-
-#. L10n: {0} is a category name.
-msgid "{addon} no longer featured in {0}."
-msgstr "{addon} ya no aparece destacado en {0}."
-
-msgid "{addon} is now featured."
-msgstr "{addon} está ahora destacado."
-
-msgid "{addon} is no longer featured."
-msgstr "{addon} ya no es destacado."
 
 #. L10n: {0} is the application, {1} is the version of the app
 msgid "{0} {1} added."
@@ -778,45 +765,21 @@ msgstr "Cuenta actualizada."
 msgid "Account {user} deleted."
 msgstr "Cuenta {user} eliminada."
 
-msgid "Created: {0}."
-msgstr "Creado: {0}."
-
-msgid "Edited field: {2} set to: {0}."
-msgstr "Campo editado: {2} establecido a: {0}."
-
-msgid "Deleted: {1}."
-msgstr "Eliminado: {1}."
-
 msgid "{rating} for {addon} updated."
 msgstr "Se actualizó el {rating} para {addon}."
 
 msgid "{addon} reviewed."
 msgstr "{addon} revisado."
 
-msgid "User {user} banned."
-msgstr "Usuario {user} expulsado."
-
-msgid "User {user} picture deleted."
-msgstr "Imagen de {user} eliminada."
-
-msgid "User {user} added to {group}."
-msgstr ""
-
-msgid "User {user} removed from {group}."
-msgstr ""
-
 msgid "{addon} unlisted."
 msgstr "{addon} no listado."
-
-msgid "{file} was signed."
-msgstr "{file} fue firmado."
 
 #. L10n: {0} is the add-on GUID.
 msgid "Add-on id {0} with GUID {1} has been deleted"
 msgstr ""
 
-msgid "{addon} migrated from preliminary."
-msgstr "{addon} migró de la categoría preliminar."
+msgid "{file} was signed."
+msgstr "{file} fue firmado."
 
 msgid "Reply by developer on {addon} {version}."
 msgstr "Respuesta del desarrollador para {addon} {version}."
@@ -842,53 +805,17 @@ msgstr "Se ha actualizado el código fuente para {addon} {version}."
 msgid "Source code uploaded"
 msgstr "Se ha actualizado el código fuente"
 
-msgid "{addon} {version} auto-approval confirmed."
-msgstr ""
-
-msgid "Auto-Approval confirmed"
-msgstr "Autoaprobración confirmada"
-
 msgid "{addon} {version} re-enabled."
 msgstr "Se reactivó {addon} {version}."
 
 msgid "{addon} {version} disabled."
 msgstr "Se deshabilitó {addon} {version}."
 
-msgid "{addon} {version} content approved."
-msgstr "Se aprobó el contenido de {addon} {version}."
-
-msgid "Content approved"
-msgstr "Se aprobó el contenido"
-
 msgid "{addon} {version} content rejected."
 msgstr "Se rechazó el contenido de {addon} {version}."
 
 msgid "Content rejected"
 msgstr "Se rechazó el contenido"
-
-msgid "{addon} information request altered or removed by admin."
-msgstr "El administrador eliminó o modificó la solicitud de información de {addon}."
-
-msgid "Information request altered"
-msgstr "Se modificó la solicitud de información"
-
-msgid "Information request cleared by developer on {addon} {version}."
-msgstr "Solicitud de información resuelta por el desarrollador en {addon} {version}."
-
-msgid "Information request removed"
-msgstr "Eliminada la solicitud de información"
-
-msgid "{addon} {version} admin add-on-review requested."
-msgstr "Se ha solicitado la revisión de un administrador para {addon} {version}."
-
-msgid "Admin add-on-review requested"
-msgstr "Se ha solicitado la revisión del complemento por parte de un administrador"
-
-msgid "{addon} {version} admin content-review requested."
-msgstr "Se ha solicitado la revisión de contenido de un administrador para {addon} {version}."
-
-msgid "Admin content-review requested"
-msgstr "Se ha solicitado la revisión de contenido de un administrador"
 
 msgid "{addon} {version} admin theme-review requested."
 msgstr "Se ha solicitado la revisión de tema de un administrador para {addon} {version}."
@@ -898,43 +825,6 @@ msgstr "Se ha solicitado la revisión de tema de un administrador"
 
 msgid "{addon} was migrated from a lightweight theme."
 msgstr "{addon} se migró desde un tema ligero."
-
-msgid "User {user} api key reset."
-msgstr "Restablecida la llave api del usuario {user}."
-
-msgid "Block for {0} added to Blocklist."
-msgstr "Bloque para {0} añadido a la lista de bloqueo."
-
-msgid "Block added"
-msgstr "Bloque agregado"
-
-msgid "Block for {0} edited in Blocklist."
-msgstr "Bloque para {0} editado en la lista de bloqueo."
-
-msgid "Block edited"
-msgstr "Bloque editado"
-
-msgid "Block for {0} deleted from Blocklist."
-msgstr "Bloquea para {0} eliminado de la lista de bloqueo."
-
-msgid "Block deleted"
-msgstr "Bloque eliminado"
-
-msgid "GUID for {addon} added to DeniedGuid."
-msgstr "GUID para {addon} añadido a DeniedGuid."
-
-msgid "GUID for {addon} removed from DeniedGuid."
-msgstr "GUID para {addon} eliminado de DeniedGuid."
-
-msgid "Block {1} action for {0} signed off."
-msgstr ""
-
-msgid "Block action signoff"
-msgstr "Bloquear registro de acción"
-
-#, fuzzy
-msgid "User {user} session(s) reset."
-msgstr "Restablecida la llave api del usuario {user}."
 
 msgid "{addon} {version} content reject scheduled."
 msgstr ""
@@ -975,24 +865,6 @@ msgstr ""
 msgid "Pending rejection cleared"
 msgstr ""
 
-msgid "{version} added to Blocklist."
-msgstr ""
-
-msgid "Version Blocked"
-msgstr ""
-
-msgid "{version} removed from Blocklist."
-msgstr ""
-
-msgid "Version Unblocked"
-msgstr ""
-
-msgid "{addon} {version} admin add-on-review cleared."
-msgstr ""
-
-msgid "Admin add-on-review cleared"
-msgstr ""
-
 msgid "{user_responsible} changed {addon} slug from {0} to {1}."
 msgstr ""
 
@@ -1008,10 +880,22 @@ msgstr ""
 msgid "Review {rating} for {addon} un-deleted."
 msgstr ""
 
-msgid "User {user} content restored."
+msgid "{addon} {version} rejected automatically after delay expired."
 msgstr ""
 
-msgid "User {user} unbanned."
+msgid "Rejected automatically after delay expired"
+msgstr ""
+
+msgid "{addon} {version} content rejected automatically after delay expired."
+msgstr ""
+
+msgid "Content rejected automatically after delay expired"
+msgstr ""
+
+msgid "{addon} {version} pending rejection changed."
+msgstr ""
+
+msgid "Pending rejection changed"
 msgstr ""
 
 msgid "Firefox"
@@ -1131,14 +1015,6 @@ msgid "Themes"
 msgstr "Temas"
 
 msgid "Deprecated Site Permissions"
-msgstr ""
-
-msgid "Accessibility"
-msgstr ""
-
-msgid ""
-"Download Firefox accessibility extensions to help you consume content and navigate online in ways that work best for you. Discover extensions that remove or reduce barriers to access by changing "
-"screen brightness, reading web pages aloud, providing precision magnification, and more."
 msgstr ""
 
 msgid "Alerts & Updates"
@@ -1330,23 +1206,32 @@ msgstr "General"
 msgid "Mozilla Public License 2.0"
 msgstr ""
 
-msgid "GNU General Public License v2.0"
+msgid "Apache License 2.0"
 msgstr ""
 
-msgid "GNU General Public License v3.0"
+msgid "GNU General Public License v2.0 only"
 msgstr ""
 
-msgid "GNU Library General Public License v2.1"
+msgid "GNU General Public License v3.0 only"
 msgstr ""
 
-msgid "GNU Library General Public License v3.0"
+msgid "GNU Lesser General Public License v2.1 only"
 msgstr ""
 
-msgid "The MIT License"
-msgstr "Licencia MIT"
+msgid "GNU Lesser General Public License v3.0 only"
+msgstr ""
 
-msgid "The BSD License"
-msgstr "Licencia BSD"
+msgid "GNU Affero General Public License v3.0 only"
+msgstr ""
+
+msgid "MIT License"
+msgstr ""
+
+msgid "ISC License"
+msgstr ""
+
+msgid "BSD 2-Clause \"Simplified\" License"
+msgstr ""
 
 msgid "Mozilla Public License 1.1"
 msgstr ""
@@ -1372,17 +1257,32 @@ msgstr "Creative Commons Reconocimiento-No Derivadas 3.0"
 msgid "Creative Commons Attribution-ShareAlike 3.0"
 msgstr "Creative Commons Reconocimiento-Compartir Igual 3.0"
 
+msgid "Creative Commons Attribution 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-NonCommercial 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-NonCommercial-NoDerivs 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-NonCommercial-Share Alike 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-NoDerivs 4.0"
+msgstr ""
+
+msgid "Creative Commons Attribution-ShareAlike 4.0"
+msgstr ""
+
+msgid "The Unlicense"
+msgstr ""
+
 msgid "Not Promoted"
 msgstr "No promocionado"
 
 msgid "Recommended"
 msgstr "Recomendado"
-
-msgid "Sponsored"
-msgstr "Patrocinado"
-
-msgid "Verified"
-msgstr "Verificado"
 
 msgid "By Firefox"
 msgstr "Por Firefox"
@@ -1629,6 +1529,41 @@ msgstr ""
 msgid "Display Name"
 msgstr "Nombre para mostrar"
 
+msgid "Confirm email address"
+msgstr ""
+
+msgid "Generate new credentials"
+msgstr "Generar nuevas credenciales"
+
+msgid "Revoke and regenerate credentials"
+msgstr "Revocar y generar credenciales"
+
+msgid "Revoke"
+msgstr "Revocar"
+
+msgid "JWT issuer"
+msgstr "Emisor JWT"
+
+msgid ""
+"To make API requests, send a <a href=\"{jwt_url}\">JSON Web Token (JWT)</a> as the authorization header. You'll need to generate a JWT for every request as explained in the <a "
+"href=\"{docs_url}\">API documentation</a>."
+msgstr ""
+
+msgid "JWT secret"
+msgstr "Secreto JWT"
+
+msgid "Please click the confirm button below to generate API credentials for user <strong>{name}</strong>."
+msgstr ""
+
+msgid "A confirmation link will be sent to your email address. After confirmation you will find your API keys on this page."
+msgstr "Se enviará un enlace de confirmación a tu dirección de correo. Cuando lo confirmes, tus claves API aparecerán en esta página."
+
+msgid "You don't have any API credentials."
+msgstr "No tienes credenciales API."
+
+msgid "Something went wrong, please contact developer support."
+msgstr ""
+
 msgid "Invalid or corrupt add-on file."
 msgstr "Archivo de complemento no válido o corrupto."
 
@@ -1659,6 +1594,9 @@ msgstr "Creadas"
 
 msgid "Downloads"
 msgstr "Descargas"
+
+msgid "Rating"
+msgstr "Calificación"
 
 msgid "All My Add-ons"
 msgstr "Todos mis complementos"
@@ -1795,6 +1733,9 @@ msgstr ""
 msgid "The highlight color of the active tab. Implemented as a border around the tab on Firefox 89+ and a line above the tab on older Firefoxes. Manifest field:  tab_line."
 msgstr ""
 
+msgid "Add-on uploads are temporarily unavailable"
+msgstr ""
+
 msgid "Review requested."
 msgstr "Revisión solicitada."
 
@@ -1803,6 +1744,9 @@ msgstr "Debes proporcionar más detalles para continuar."
 
 msgid "Your old credentials were revoked and are no longer valid."
 msgstr "Se han revocado tus antiguas credenciales y ya no son válidas."
+
+msgid "Keep your API keys secret and never share them with anyone, including Mozilla contributors."
+msgstr ""
 
 msgid "New API key created"
 msgstr "Nueva clave API creada"
@@ -2698,6 +2642,10 @@ msgstr ""
 "<span class=\"instruction-emphasis\">Nota:</span> Los archivos fuente (aparte de las bibliotecas de código abierto de terceros) no se pueden transpilar, ofuscar, minimizar o generar por máquinas."
 
 #, python-format
+msgid "The maximum file size accepted is %(max_size)s."
+msgstr ""
+
+#, python-format
 msgid "For more information, please read <a %(a_attrs)s>Source Code Submission</a> on Firefox Extension Workshop."
 msgstr ""
 
@@ -2721,6 +2669,10 @@ msgstr "Subir versión"
 
 msgid "Use the fields below to upload your add-on package. After upload, a series of automated validation tests will be run on your file."
 msgstr "Usa los siguientes campos para subir el complemento. Una vez subido, se ejecutará una serie de pruebas de validación automática en tu fichero."
+
+#, python-format
+msgid "The maximum file size accepted is %(max_size)s. If your add-on is larger than %(max_size)s, it will fail validation."
+msgstr ""
 
 msgid "Which applications is this version compatible with?"
 msgstr "¿Con qué aplicaciones es compatible esta versión?"
@@ -2786,49 +2738,6 @@ msgstr "Atrás"
 
 msgid "API Credentials"
 msgstr "Credenciales de API"
-
-#, python-format
-msgid "For detailed instructions, consult the <a href=\"%(docs_url)s\">API documentation</a>."
-msgstr "Para más instrucciones, consulta la <a href=\"%(docs_url)s\">documentación API</a>."
-
-msgid "Keep your API keys secret and <strong>never share them with anyone</strong>, including Mozilla contributors."
-msgstr "Mantén en secreto tus llaves API y <strong>no las compartas con nadie</strong>, ni siquiera con los colaboradores de Mozilla."
-
-msgid "JWT issuer"
-msgstr "Emisor JWT"
-
-msgid "JWT secret"
-msgstr "Secreto JWT"
-
-#, python-format
-msgid ""
-"To make API requests, send a <a href=\"%(jwt_url)s\">JSON Web Token (JWT)</a> as the authorization header. You'll need to generate a JWT for every request as explained in the <a "
-"href=\"%(docs_url)s\">API documentation</a>."
-msgstr ""
-"Para hacer solicitudes API, envía un <a href=\"%(jwt_url)s\">JSON Web Token (JWT)</a> en forma de título para la autorización. Tendrás que generar un JWT cada vez que envíes una solicitud, como se "
-"explica en la <a href=\"%(docs_url)s\">documentation API</a>."
-
-#, python-format
-msgid "Please click the confirm button below to generate API credentials for user <strong>%(name)s</strong>."
-msgstr "Haz clic en el botón Confirmar para generar credenciales API para el usuario <strong>%(name)s</strong>."
-
-msgid "A confirmation link will be sent to your email address. After confirmation you will find your API keys on this page."
-msgstr "Se enviará un enlace de confirmación a tu dirección de correo. Cuando lo confirmes, tus claves API aparecerán en esta página."
-
-msgid "You don't have any API credentials."
-msgstr "No tienes credenciales API."
-
-msgid "Revoke"
-msgstr "Revocar"
-
-msgid "Revoke and regenerate credentials"
-msgstr "Revocar y generar credenciales"
-
-msgid "Confirm and generate new credentials"
-msgstr "Confirmar y generar nuevas credenciales"
-
-msgid "Generate new credentials"
-msgstr "Generar nuevas credenciales"
 
 #, python-format
 msgid ""
@@ -3072,13 +2981,13 @@ msgstr ""
 msgid "Sort by:"
 msgstr "Ordenar por:"
 
-#. %s is a list of HTML tags.
+#. %s is a list of markdown syntax.
 #, python-format
-msgid "Allowed HTML: %(allowed_html)s"
-msgstr "HTML permitido: %(allowed_html)s"
+msgid "Allowed Markdown: %(allowed_markdown)s"
+msgstr ""
 
-msgid "Some HTML supported."
-msgstr "Algunas etiquetas HTML admitidas."
+msgid "Some Markdown supported."
+msgstr ""
 
 msgid "Remove this application"
 msgstr "Borrar esta aplicación"
@@ -3189,15 +3098,6 @@ msgstr "Programa de extensiones recomendadas"
 
 msgid "Contribute"
 msgstr "Colabora"
-
-msgid "Review Add-ons"
-msgstr "Revisar complementos"
-
-msgid "Volunteer reviewers help keep add-ons safe and reliable to use. They enjoy great perks too!"
-msgstr "Los revisores colaboran para que los complementos sean fiables y seguros de usar. ¡También disfrutan de grandes ventajas!"
-
-msgid "Join us!"
-msgstr "¡Únete a nosotros!"
 
 msgid "Write Some Code"
 msgstr "Escribir código"
@@ -4348,10 +4248,6 @@ msgid "Double-click any word to instantly see its definition."
 msgstr "Haz doble clic en cualquier palabra para ver instantáneamente su definición."
 
 #. editorial content for the discovery pane.
-msgid "Blues & Yellows"
-msgstr "Azules y amarillos"
-
-#. editorial content for the discovery pane.
 #. editorial content for the primary hero shelves.
 msgid "Save batches of tabs as convenient bookmarks."
 msgstr ""
@@ -4412,6 +4308,10 @@ msgstr ""
 
 #. editorial content for the discovery pane.
 msgid "Change the way the web looks."
+msgstr ""
+
+#. editorial content for the discovery pane.
+msgid "Customize YouTube to taste. Give it a new look, new features & filter only the content you want."
 msgstr ""
 
 #. editorial content for the primary hero shelves.
@@ -4573,6 +4473,10 @@ msgstr ""
 msgid "Block time-wasting websites. Block them completely or just during time frames of your choosing."
 msgstr ""
 
+#. editorial content for the primary hero shelves.
+msgid "Easily summarize emails, docs, articles, and video transcripts in English across the web — without sacrificing your privacy."
+msgstr ""
+
 #. editorial content for the secondary hero shelves.
 msgid "Extensions are like apps for Firefox."
 msgstr "Las extensiones son como aplicaciones para Firefox."
@@ -4586,15 +4490,16 @@ msgid "See all extensions"
 msgstr "Ver todas las extensiones"
 
 #. editorial content for the secondary hero shelves.
-msgid "Port Authority (Developer Spotlight)"
-msgstr ""
-
-#. editorial content for the secondary hero shelves.
 msgid "Privacy & Security extensions"
 msgstr ""
 
 #. editorial content for the secondary hero shelves.
-msgid "Fantastic tab managers"
+#. editorial content for the homepage shelves.
+msgid "Tab managers"
+msgstr ""
+
+#. editorial content for the secondary hero shelves.
+msgid "Spotlight: Adaptive Tab Bar Color"
 msgstr ""
 
 #. editorial content for the secondary hero shelves.
@@ -4673,10 +4578,6 @@ msgstr "Redes sociales"
 #, fuzzy
 msgid "See more social streaming staff picks"
 msgstr "Ver más extensiones populares"
-
-#. editorial content for the homepage shelves.
-msgid "Tab managers"
-msgstr ""
 
 #. editorial content for the homepage shelves.
 #, fuzzy
@@ -4776,6 +4677,22 @@ msgstr ""
 msgid "See more download manager staff picks"
 msgstr ""
 
+#. editorial content for the homepage shelves.
+msgid "Accessibility extensions"
+msgstr ""
+
+#. editorial content for the homepage shelves.
+msgid "See more accessibility staff picks"
+msgstr ""
+
+#. editorial content for the homepage shelves.
+msgid "Extension starter pack"
+msgstr ""
+
+#. editorial content for the homepage shelves.
+msgid "See more starter extension staff picks"
+msgstr ""
+
 msgid "Unreviewed"
 msgstr ""
 
@@ -4789,12 +4706,8 @@ msgstr ""
 msgid "Could not parse the manifest file."
 msgstr "No se pudo analizar el archivo de manifiesto."
 
-#, fuzzy
-msgid "Add-on ID is required for Firefox 47 and below."
-msgstr "Se necesita GUID para Firefox 47 y versiones superiores."
-
-msgid "Lowest supported \"strict_min_version\" is 42.0."
-msgstr "La \"strict_min_version\" admitida más antigua es la 42.0."
+msgid "Lowest supported \"strict_min_version\" is {min_version}."
+msgstr ""
 
 msgid "Unknown \"strict_min_version\" {appver} for {app}"
 msgstr "{appver} \"strict_min_version\" desconocida para {app}"
@@ -4953,6 +4866,12 @@ msgstr "Puntuado con {0} de 5 estrellas"
 #, python-format
 msgid "Rated %(rating)s out of 5 stars"
 msgstr "Puntuado con %(rating)s de 5 estrellas"
+
+msgid "Unsupported file type, please upload a file {extensions}."
+msgstr ""
+
+msgid "File too large."
+msgstr ""
 
 #, python-format
 msgid "<dd>%(review_author)s</dd>"

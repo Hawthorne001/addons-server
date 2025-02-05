@@ -4,8 +4,8 @@ from django.core.management.base import BaseCommand
 
 import olympia.core.logger
 from olympia import amo
-from olympia.abuse.models import CinderDecision, CinderJob
-from olympia.abuse.utils import CinderActionRejectVersionDelayed
+from olympia.abuse.actions import ContentActionRejectVersionDelayed
+from olympia.abuse.models import CinderJob, ContentDecision
 from olympia.activity.models import ActivityLog
 from olympia.addons.models import Addon, AddonReviewerFlags
 from olympia.constants.abuse import DECISION_ACTIONS
@@ -85,7 +85,6 @@ class Command(BaseCommand):
             )
             return
         log.info('Sending email for %s' % addon)
-        log_details = getattr(relevant_activity_log, 'details', {})
         cinder_job = (
             CinderJob.objects.filter(pending_rejections__version__in=versions)
             .distinct()
@@ -93,21 +92,24 @@ class Command(BaseCommand):
         )
         # We just need the decision to send an accurate email
         decision = (
-            cinder_job.decision
+            cinder_job.final_decision
             if cinder_job
             # Fake a decision if there isn't a job
-            else CinderDecision(
+            else ContentDecision(
                 addon=addon,
                 action=DECISION_ACTIONS.AMO_REJECT_VERSION_WARNING_ADDON,
             )
         )
-        action_helper = CinderActionRejectVersionDelayed(decision)
+        decision.notes = relevant_activity_log.details.get('comments', '')
+        action_helper = ContentActionRejectVersionDelayed(decision)
         action_helper.notify_owners(
             log_entry_id=relevant_activity_log.id,
-            policy_text=log_details.get('comments', ''),
             extra_context={
                 'delayed_rejection_days': self.EXPIRING_PERIOD_DAYS,
                 'version_list': ', '.join(str(v.version) for v in versions),
+                # Because we expand the reason/policy text into notes in the reviewer
+                # tools, we don't want to duplicate it as policies too.
+                'policies': (),
             },
         )
 

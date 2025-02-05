@@ -64,8 +64,8 @@ from olympia.files.utils import extract_translations, resolve_i18n_message
 from olympia.ratings.models import Rating
 from olympia.tags.models import Tag
 from olympia.translations.fields import (
-    LinkifiedField,
-    PurifiedField,
+    NoURLsField,
+    PurifiedMarkdownField,
     TranslatedField,
     save_signal,
 )
@@ -307,8 +307,6 @@ class AddonManager(ManagerBase):
         show_temporarily_delayed=True,
         show_only_upcoming=False,
     ):
-        from olympia.reviewers.models import NeedsHumanReview  # circular reference
-
         filters = {
             'type__in': amo.GROUP_TYPE_THEME if theme_review else amo.GROUP_TYPE_ADDON,
             'versions__due_date__isnull': False,
@@ -367,24 +365,12 @@ class AddonManager(ManagerBase):
                 first_version_id=Subquery(
                     versions_due_qs.filter(addon=OuterRef('pk')).values('pk')[:1]
                 ),
-                needs_human_review_from_cinder=Exists(
-                    versions_due_qs.filter(
-                        needshumanreview__is_active=True,
-                        needshumanreview__reason=NeedsHumanReview.REASONS.CINDER_ESCALATION,
+                **{
+                    name: Exists(versions_due_qs.filter(q))
+                    for name, q in (
+                        Version.unfiltered.get_due_date_reason_q_objects().items()
                     )
-                ),
-                needs_human_review_from_abuse=Exists(
-                    versions_due_qs.filter(
-                        needshumanreview__is_active=True,
-                        needshumanreview__reason=NeedsHumanReview.REASONS.ABUSE_ADDON_VIOLATION,
-                    )
-                ),
-                needs_human_review_from_appeal=Exists(
-                    versions_due_qs.filter(
-                        needshumanreview__is_active=True,
-                        needshumanreview__reason=NeedsHumanReview.REASONS.ABUSE_ADDON_VIOLATION_APPEAL,
-                    )
-                ),
+                },
             )
             .filter(first_version_id__isnull=False)
             .transform(first_pending_version_transformer)
@@ -515,12 +501,14 @@ class Addon(OnChangeMixin, ModelBase):
     homepage = TranslatedField(max_length=255)
     support_email = TranslatedField(db_column='supportemail', max_length=100)
     support_url = TranslatedField(db_column='supporturl', max_length=255)
-    description = PurifiedField(short=False, max_length=15000)
+    description = PurifiedMarkdownField(short=False, max_length=15000)
 
-    summary = LinkifiedField(max_length=250)
-    developer_comments = PurifiedField(db_column='developercomments', max_length=3000)
-    eula = PurifiedField(max_length=350000)
-    privacy_policy = PurifiedField(db_column='privacypolicy', max_length=150000)
+    summary = NoURLsField(max_length=250)
+    developer_comments = PurifiedMarkdownField(
+        db_column='developercomments', max_length=3000
+    )
+    eula = PurifiedMarkdownField(max_length=350000)
+    privacy_policy = PurifiedMarkdownField(db_column='privacypolicy', max_length=150000)
 
     average_rating = models.FloatField(
         max_length=255, default=0, null=True, db_column='averagerating'
@@ -1870,12 +1858,6 @@ class Addon(OnChangeMixin, ModelBase):
 
         return BlocklistSubmission.get_submissions_from_guid(self.addonguid_guid)
 
-    @property
-    def git_extraction_is_in_progress(self):
-        from olympia.git.models import GitExtractionEntry
-
-        return GitExtractionEntry.objects.filter(addon=self, in_progress=True).exists()
-
     @cached_property
     def tag_list(self):
         attach_tags([self])
@@ -1896,24 +1878,23 @@ class Addon(OnChangeMixin, ModelBase):
     def update_all_due_dates(self):
         """
         Update all due dates on versions of this add-on.
+
+        Use when dealing with having to re-check all due dates for all versions
+        of an add-on as it does it in a slightly more optimized than checking
+        for each version individually.
         """
-        versions = self.versions(manager='unfiltered_for_relations')
-        for version in versions.should_have_due_date().filter(due_date__isnull=True):
-            due_date = get_review_due_date()
-            log.info(
-                'Version %r (%s) due_date set to %s', version, version.id, due_date
-            )
-            version.update(due_date=due_date, _signal=False)
-        for version in versions.should_have_due_date(negate=True).filter(
-            due_date__isnull=False
+        manager = self.versions(manager='unfiltered_for_relations')
+        for version in (
+            manager.should_have_due_date().filter(due_date__isnull=True).no_transforms()
         ):
-            log.info(
-                'Version %r (%s) due_date of %s cleared',
-                version,
-                version.id,
-                version.due_date,
-            )
-            version.update(due_date=None, _signal=False)
+            due_date = get_review_due_date()
+            version.reset_due_date(due_date=due_date, should_have_due_date=True)
+        for version in (
+            manager.should_have_due_date(negate=True)
+            .filter(due_date__isnull=False)
+            .no_transforms()
+        ):
+            version.reset_due_date(should_have_due_date=False)
 
 
 dbsignals.pre_save.connect(save_signal, sender=Addon, dispatch_uid='addon_translations')
@@ -2025,13 +2006,6 @@ class AddonReviewerFlags(ModelBase):
     notified_about_expiring_delayed_rejections = models.BooleanField(
         default=None, null=True
     )
-
-
-@receiver(
-    dbsignals.post_save, sender=AddonReviewerFlags, dispatch_uid='addon_review_flags'
-)
-def update_due_date_for_auto_approval_changes(sender, instance=None, **kwargs):
-    instance.addon.update_all_due_dates()
 
 
 class AddonRegionalRestrictions(ModelBase):

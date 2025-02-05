@@ -1,146 +1,146 @@
 # Translations template for addons-server.
-# Copyright (C) 2024 Mozilla
+# Copyright (C) 2025 Mozilla
 # This file is distributed under the same license as the addons-server project.
-# FIRST AUTHOR <EMAIL@ADDRESS>, 2024.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2025.
 #
 #, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: addons-server 1.0\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-05-14 15:43+0000\n"
+"POT-Creation-Date: 2025-02-03 14:26+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Generated-By: Babel 2.14.0\n"
+"Generated-By: Babel 2.16.0\n"
 
-#: static/js/common/upload-addon.js:51 static/js/common/upload-image.js:133
+#: static/js/common/upload-addon.js:52 static/js/common/upload-image.js:133
 msgid "There was a problem contacting the server."
 msgstr ""
 
-#: static/js/common/upload-addon.js:75
+#: static/js/common/upload-addon.js:76
 msgid "Select a file..."
 msgstr ""
 
-#: static/js/common/upload-addon.js:79
+#: static/js/common/upload-addon.js:80
 msgid "Your add-on should end with .zip, .xpi or .crx"
 msgstr ""
 
 #. L10n: {0} is the percent of the file that has been uploaded.
-#: static/js/common/upload-addon.js:112
+#: static/js/common/upload-addon.js:115
 #, python-format
 msgid "{0}% complete"
 msgstr ""
 
-#: static/js/common/upload-addon.js:116
+#: static/js/common/upload-addon.js:119
 msgid "{0} of {1}"
 msgstr ""
 
-#: static/js/common/upload-addon.js:160
+#: static/js/common/upload-addon.js:163
 msgid "Cancel"
 msgstr ""
 
-#: static/js/common/upload-addon.js:184
+#: static/js/common/upload-addon.js:187
 msgid "Uploading {0}"
 msgstr ""
 
-#: static/js/common/upload-addon.js:225
+#: static/js/common/upload-addon.js:228
 msgid "Error with {0}"
 msgstr ""
 
-#: static/js/common/upload-addon.js:233
+#: static/js/common/upload-addon.js:236
 msgid "Please make sure to report any linting related issues on GitHub"
 msgstr ""
 
-#: static/js/common/upload-addon.js:244
+#: static/js/common/upload-addon.js:247
 msgid "Your add-on failed validation with {0} error."
 msgid_plural "Your add-on failed validation with {0} errors."
 msgstr[0] ""
 msgstr[1] ""
 
-#: static/js/common/upload-addon.js:262
+#: static/js/common/upload-addon.js:265
 msgid "&hellip;and {0} more"
 msgid_plural "&hellip;and {0} more"
 msgstr[0] ""
 msgstr[1] ""
 
-#: static/js/common/upload-addon.js:283 static/js/common/upload-addon.js:718
+#: static/js/common/upload-addon.js:286 static/js/common/upload-addon.js:721
 msgid "See full validation report"
 msgstr ""
 
-#: static/js/common/upload-addon.js:296
+#: static/js/common/upload-addon.js:299
 msgid "Validating {0}"
 msgstr ""
 
-#: static/js/common/upload-addon.js:347
+#: static/js/common/upload-addon.js:350
 msgid "Your add-on exceeds the maximum size of {0}."
 msgstr ""
 
-#: static/js/common/upload-addon.js:355
+#: static/js/common/upload-addon.js:358
 msgid "Received an empty response from the server; status: {0}"
 msgstr ""
 
-#: static/js/common/upload-addon.js:400
+#: static/js/common/upload-addon.js:403
 msgid "Your extension has to be compatible with at least one application."
 msgstr ""
 
-#: static/js/common/upload-addon.js:470
+#: static/js/common/upload-addon.js:473
 msgid "Unexpected server error while validating."
 msgstr ""
 
-#: static/js/common/upload-addon.js:516
+#: static/js/common/upload-addon.js:519
 msgid "Explicitly marked as compatible with Firefox for Android in the manifest"
 msgstr ""
 
-#: static/js/common/upload-addon.js:558
+#: static/js/common/upload-addon.js:561
 msgid "Finished validating {0}"
 msgstr ""
 
-#: static/js/common/upload-addon.js:565
+#: static/js/common/upload-addon.js:568
 msgid "Your add-on validation timed out, it will be manually reviewed."
 msgstr ""
 
-#: static/js/common/upload-addon.js:570
+#: static/js/common/upload-addon.js:573
 msgid "Your add-on was validated with no errors and {0} warning."
 msgid_plural "Your add-on was validated with no errors and {0} warnings."
 msgstr[0] ""
 msgstr[1] ""
 
-#: static/js/common/upload-addon.js:579
+#: static/js/common/upload-addon.js:582
 msgid "Your add-on was validated with no errors and {0} message."
 msgid_plural "Your add-on was validated with no errors and {0} messages."
 msgstr[0] ""
 msgstr[1] ""
 
-#: static/js/common/upload-addon.js:587
+#: static/js/common/upload-addon.js:590
 msgid "Your add-on was validated with no errors or warnings."
 msgstr ""
 
-#: static/js/common/upload-addon.js:664
+#: static/js/common/upload-addon.js:667
 msgid "Include detailed version notes (this can be done in the next step)."
 msgstr ""
 
-#: static/js/common/upload-addon.js:667
+#: static/js/common/upload-addon.js:670
 msgid ""
 "If your add-on requires an account to a website in order to be fully tested, "
 "include a test username and password in the Notes to Reviewer (this can be "
 "done in the next step)."
 msgstr ""
 
-#: static/js/common/upload-addon.js:673
+#: static/js/common/upload-addon.js:676
 msgid "Add-on submission checklist"
 msgstr ""
 
-#: static/js/common/upload-addon.js:677
+#: static/js/common/upload-addon.js:680
 msgid ""
 "Please verify the following points before finalizing your submission. This "
 "will minimize delays or misunderstanding during the review process:"
 msgstr ""
 
-#: static/js/common/upload-addon.js:684
+#: static/js/common/upload-addon.js:687
 msgid ""
 "Minified, concatenated or otherwise machine-generated scripts (excluding "
 "known libraries) need to have their sources submitted separately for review. "
@@ -148,19 +148,19 @@ msgid ""
 "submission rejected."
 msgstr ""
 
-#: static/js/common/upload-addon.js:697
+#: static/js/common/upload-addon.js:700
 msgid "The validation process found these issues that can lead to rejections:"
 msgstr ""
 
-#: static/js/common/upload-base.js:75
+#: static/js/common/upload-base.js:68
 msgid "The filetype you uploaded isn't recognized."
 msgstr ""
 
-#: static/js/common/upload-base.js:85
+#: static/js/common/upload-base.js:78 static/js/zamboni/global.js:647
 msgid "Your file exceeds the maximum size of {0}."
 msgstr ""
 
-#: static/js/common/upload-base.js:111
+#: static/js/common/upload-base.js:104
 msgid "You cancelled the upload."
 msgstr ""
 
@@ -778,25 +778,25 @@ msgstr ""
 msgid "Other"
 msgstr ""
 
-#: static/js/zamboni/devhub.js:276
+#: static/js/zamboni/devhub.js:287
 msgid "Changes Saved"
 msgstr ""
 
-#: static/js/zamboni/devhub.js:293
+#: static/js/zamboni/devhub.js:304
 msgid "Enter a new author's email address"
 msgstr ""
 
-#: static/js/zamboni/devhub.js:419
+#: static/js/zamboni/devhub.js:430
 msgid "There was an error uploading your file."
 msgstr ""
 
-#: static/js/zamboni/devhub.js:575
+#: static/js/zamboni/devhub.js:586
 msgid "{files} file"
 msgid_plural "{files} files"
 msgstr[0] ""
 msgstr[1] ""
 
-#: static/js/zamboni/devhub.js:1101
+#: static/js/zamboni/devhub.js:1118
 msgid "Image changes being processed"
 msgstr ""
 
@@ -822,39 +822,39 @@ msgstr ""
 msgid "Remove this localization"
 msgstr ""
 
-#: static/js/zamboni/reviewers.js:153
+#: static/js/zamboni/reviewers.js:211
 msgid "{name} was viewing this page first."
 msgstr ""
 
-#: static/js/zamboni/reviewers.js:161
+#: static/js/zamboni/reviewers.js:219
 msgid "Review page polling failed."
 msgstr ""
 
-#: static/js/zamboni/reviewers.js:414
+#: static/js/zamboni/reviewers.js:507
 msgid "{name} was viewing this add-on first."
 msgstr ""
 
-#: static/js/zamboni/reviewers.js:427 static/js/zamboni/reviewers.js:453
+#: static/js/zamboni/reviewers.js:520 static/js/zamboni/reviewers.js:546
 msgid "Loading&hellip;"
 msgstr ""
 
-#: static/js/zamboni/reviewers.js:432
+#: static/js/zamboni/reviewers.js:525
 msgid "Version Notes"
 msgstr ""
 
-#: static/js/zamboni/reviewers.js:439
+#: static/js/zamboni/reviewers.js:532
 msgid "Notes for Reviewers"
 msgstr ""
 
-#: static/js/zamboni/reviewers.js:446
+#: static/js/zamboni/reviewers.js:539
 msgid "No version notes found"
 msgstr ""
 
-#: static/js/zamboni/reviewers.js:458
+#: static/js/zamboni/reviewers.js:551
 msgid "Review Text"
 msgstr ""
 
-#: static/js/zamboni/reviewers.js:465
+#: static/js/zamboni/reviewers.js:558
 msgid "Review notes found"
 msgstr ""
 

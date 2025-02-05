@@ -1,6 +1,7 @@
 import json
 import os.path
 import random
+import uuid
 from unittest import mock
 
 from django.conf import settings
@@ -10,7 +11,7 @@ import waffle
 from waffle.testutils import override_switch
 
 from olympia import amo, core
-from olympia.abuse.models import AbuseReport, CinderJob
+from olympia.abuse.models import AbuseReport, CinderJob, ContentDecision
 from olympia.activity.models import ActivityLog
 from olympia.addons.models import Addon, Preview
 from olympia.amo.tests import (
@@ -22,7 +23,11 @@ from olympia.amo.tests import (
 )
 from olympia.amo.tests.test_helpers import get_image_path
 from olympia.bandwagon.models import Collection, CollectionAddon
-from olympia.constants.abuse import DECISION_ACTIONS
+from olympia.constants.abuse import (
+    DECISION_ACTIONS,
+    ILLEGAL_CATEGORIES,
+    ILLEGAL_SUBCATEGORIES,
+)
 from olympia.constants.promoted import NOT_PROMOTED, NOTABLE, RECOMMENDED
 from olympia.ratings.models import Rating
 from olympia.reviewers.models import NeedsHumanReview
@@ -31,6 +36,7 @@ from olympia.versions.models import VersionPreview
 
 from ..cinder import (
     CinderAddon,
+    CinderAddonHandledByLegal,
     CinderAddonHandledByReviewers,
     CinderCollection,
     CinderRating,
@@ -41,18 +47,23 @@ from ..cinder import (
 
 
 class BaseTestCinderCase:
-    cinder_class = None  # Override in child classes
+    CinderClass = None  # Override in child classes
     expected_queue_suffix = None  # Override in child classes
     expected_queries_for_report = -1  # Override in child classes
 
     def test_queue(self):
         target = self._create_dummy_target()
-        cinder_entity = self.cinder_class(target)
+        cinder_entity = self.CinderClass(target)
         assert cinder_entity.queue_suffix == self.expected_queue_suffix
         assert (
             cinder_entity.queue
             == f'{settings.CINDER_QUEUE_PREFIX}{cinder_entity.queue_suffix}'
         )
+
+    def test_queue_appeal(self):
+        target = self._create_dummy_target()
+        cinder_entity = self.CinderClass(target)
+        assert cinder_entity.queue == cinder_entity.queue_appeal
 
     def _create_dummy_target(self, **kwargs):
         raise NotImplementedError
@@ -101,7 +112,7 @@ class BaseTestCinderCase:
         # loaded before.
         abuse_report.reload()
         report = CinderReport(abuse_report)
-        cinder_instance = self.cinder_class(abuse_report.target)
+        cinder_instance = self.CinderClass(abuse_report.target)
         with self.assertNumQueries(self.expected_queries_for_report):
             assert cinder_instance.report(report=report, reporter=None) == '1234-xyz'
         assert (
@@ -125,9 +136,14 @@ class BaseTestCinderCase:
     def test_report(self):
         self._test_report(self._create_dummy_target())
 
-    def _test_appeal(self, appealer, cinder_instance=None):
-        fake_decision_id = 'decision-id-to-appeal-666'
-        cinder_instance = cinder_instance or self.cinder_class(
+    def _test_appeal(
+        self,
+        appealer,
+        *,
+        cinder_entity_instance=None,
+        appealed_decision_id='decision-id-to-appeal-666',
+    ):
+        cinder_entity_instance = cinder_entity_instance or self.CinderClass(
             self._create_dummy_target()
         )
 
@@ -138,8 +154,8 @@ class BaseTestCinderCase:
             status=201,
         )
         assert (
-            cinder_instance.appeal(
-                decision_cinder_id=fake_decision_id,
+            cinder_entity_instance.appeal(
+                decision_cinder_id=appealed_decision_id,
                 appeal_text='reason',
                 appealer=appealer,
             )
@@ -152,8 +168,8 @@ class BaseTestCinderCase:
             status=400,
         )
         with self.assertRaises(ConnectionError):
-            cinder_instance.appeal(
-                decision_cinder_id=fake_decision_id,
+            cinder_entity_instance.appeal(
+                decision_cinder_id=appealed_decision_id,
                 appeal_text='reason',
                 appealer=appealer,
             )
@@ -165,14 +181,14 @@ class BaseTestCinderCase:
         self._test_appeal(CinderUnauthenticatedReporter('itsme', 'm@r.io'))
 
     def test_get_str(self):
-        instance = self.cinder_class(self._create_dummy_target())
+        instance = self.CinderClass(self._create_dummy_target())
         assert instance.get_str(123) == '123'
         assert instance.get_str(None) == ''
         assert instance.get_str(' ') == ''
 
 
 class TestCinderAddon(BaseTestCinderCase, TestCase):
-    cinder_class = CinderAddon
+    CinderClass = CinderAddon
     # 2 queries expected:
     # - Authors (can't use the listed_authors transformer, we want non-listed as well,
     #            and we have custom limits for batch-sending relationships)
@@ -183,15 +199,23 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
     def _create_dummy_target(self, **kwargs):
         return addon_factory(**kwargs)
 
-    def test_queue_theme(self):
+    def test_queue_with_theme(self):
         target = self._create_dummy_target(type=amo.ADDON_STATICTHEME)
-        cinder_entity = self.cinder_class(target)
+        cinder_entity = self.CinderClass(target)
         expected_queue_suffix = 'themes'
         assert cinder_entity.queue_suffix == expected_queue_suffix
         assert (
             cinder_entity.queue
             == f'{settings.CINDER_QUEUE_PREFIX}{cinder_entity.queue_suffix}'
         )
+
+    def test_queue_appeal(self):
+        extension = self._create_dummy_target()
+        assert self.CinderClass(extension).queue_appeal == 'amo-escalations'
+
+        theme = self._create_dummy_target(type=amo.ADDON_STATICTHEME)
+        # we only have a special queue for extensions
+        assert self.CinderClass(theme).queue == f'{settings.CINDER_QUEUE_PREFIX}themes'
 
     def test_build_report_payload(self):
         addon = self._create_dummy_target(
@@ -203,7 +227,7 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
             version_kw={'release_notes': 'Søme release notes'},
         )
         message = ' bad addon!'
-        cinder_addon = self.cinder_class(addon)
+        cinder_addon = self.CinderClass(addon)
         encoded_message = cinder_addon.get_str(message)
         abuse_report = AbuseReport.objects.create(guid=addon.guid, message=message)
         data = cinder_addon.build_report_payload(
@@ -241,6 +265,8 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
                             'message': encoded_message,
                             'reason': None,
                             'considers_illegal': False,
+                            'illegal_category': None,
+                            'illegal_subcategory': None,
                         },
                         'entity_type': 'amo_report',
                     }
@@ -274,6 +300,8 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
                         'message': encoded_message,
                         'reason': None,
                         'considers_illegal': False,
+                        'illegal_category': None,
+                        'illegal_subcategory': None,
                     },
                     'entity_type': 'amo_report',
                 },
@@ -319,6 +347,8 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
                         'message': encoded_message,
                         'reason': None,
                         'considers_illegal': False,
+                        'illegal_category': None,
+                        'illegal_subcategory': None,
                     },
                     'entity_type': 'amo_report',
                 },
@@ -362,7 +392,7 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
         )
         self.make_addon_promoted(addon, group=RECOMMENDED)
         message = ' bad addon!'
-        cinder_addon = self.cinder_class(addon)
+        cinder_addon = self.CinderClass(addon)
         encoded_message = cinder_addon.get_str(message)
         abuse_report = AbuseReport.objects.create(guid=addon.guid, message=message)
         data = cinder_addon.build_report_payload(
@@ -400,6 +430,8 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
                             'message': encoded_message,
                             'reason': None,
                             'considers_illegal': False,
+                            'illegal_category': None,
+                            'illegal_subcategory': None,
                         },
                         'entity_type': 'amo_report',
                     }
@@ -427,7 +459,7 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
         )
         self.make_addon_promoted(addon, group=NOTABLE)
         message = ' bad addon!'
-        cinder_addon = self.cinder_class(addon)
+        cinder_addon = self.CinderClass(addon)
         encoded_message = cinder_addon.get_str(message)
         abuse_report = AbuseReport.objects.create(guid=addon.guid, message=message)
         data = cinder_addon.build_report_payload(
@@ -465,6 +497,8 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
                             'message': encoded_message,
                             'reason': None,
                             'considers_illegal': False,
+                            'illegal_category': None,
+                            'illegal_subcategory': None,
                         },
                         'entity_type': 'amo_report',
                     }
@@ -491,7 +525,7 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
         author = user_factory()
         addon = self._create_dummy_target(users=[author])
         message = '@bad addon!'
-        cinder_addon = self.cinder_class(addon)
+        cinder_addon = self.CinderClass(addon)
         abuse_report = AbuseReport.objects.create(guid=addon.guid, message=message)
 
         data = cinder_addon.build_report_payload(
@@ -517,6 +551,8 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
                         'message': message,
                         'reason': None,
                         'considers_illegal': False,
+                        'illegal_category': None,
+                        'illegal_subcategory': None,
                     },
                     'entity_type': 'amo_report',
                 },
@@ -564,6 +600,8 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
                         'message': message,
                         'reason': None,
                         'considers_illegal': False,
+                        'illegal_category': None,
+                        'illegal_subcategory': None,
                     },
                     'entity_type': 'amo_report',
                 },
@@ -606,7 +644,7 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
     def test_build_report_payload_with_author_and_reporter_being_the_same(self):
         user = user_factory()
         addon = self._create_dummy_target(users=[user])
-        cinder_addon = self.cinder_class(addon)
+        cinder_addon = self.CinderClass(addon)
         message = 'self reporting! '
         encoded_message = cinder_addon.get_str(message)
         abuse_report = AbuseReport.objects.create(guid=addon.guid, message=message)
@@ -634,6 +672,8 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
                         'message': encoded_message,
                         'reason': None,
                         'considers_illegal': False,
+                        'illegal_category': None,
+                        'illegal_subcategory': None,
                     },
                     'entity_type': 'amo_report',
                 },
@@ -689,7 +729,7 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
             )
         (p0, p1) = list(addon.previews.all())
         Preview.objects.create(addon=addon, position=5)  # No file, ignored
-        cinder_addon = self.cinder_class(addon)
+        cinder_addon = self.CinderClass(addon)
         message = ' report with images '
         encoded_message = cinder_addon.get_str(message)
         abuse_report = AbuseReport.objects.create(guid=addon.guid, message=message)
@@ -744,6 +784,8 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
                             'message': encoded_message,
                             'reason': None,
                             'considers_illegal': False,
+                            'illegal_category': None,
+                            'illegal_subcategory': None,
                         },
                         'entity_type': 'amo_report',
                     },
@@ -789,7 +831,7 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
         VersionPreview.objects.create(
             version=addon.current_version, position=5
         )  # No file, ignored
-        cinder_addon = self.cinder_class(addon)
+        cinder_addon = self.CinderClass(addon)
         message = 'report with images'
         encoded_message = cinder_addon.get_str(message)
         abuse_report = AbuseReport.objects.create(guid=addon.guid, message=message)
@@ -836,6 +878,8 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
                             'message': encoded_message,
                             'reason': None,
                             'considers_illegal': False,
+                            'illegal_category': None,
+                            'illegal_subcategory': None,
                         },
                         'entity_type': 'amo_report',
                     },
@@ -857,7 +901,7 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
         addon = self._create_dummy_target()
         for _ in range(0, 6):
             addon.authors.add(user_factory())
-        cinder_addon = self.cinder_class(addon)
+        cinder_addon = self.CinderClass(addon)
         message = 'report for lots of relationships'
         abuse_report = AbuseReport.objects.create(guid=addon.guid, message=message)
         data = cinder_addon.build_report_payload(
@@ -899,6 +943,8 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
                         'message': 'report for lots of relationships',
                         'reason': None,
                         'considers_illegal': False,
+                        'illegal_category': None,
+                        'illegal_subcategory': None,
                     },
                     'entity_type': 'amo_report',
                 },
@@ -933,7 +979,7 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
         addon = self._create_dummy_target()
         for _ in range(0, 6):
             addon.authors.add(user_factory())
-        cinder_addon = self.cinder_class(addon)
+        cinder_addon = self.CinderClass(addon)
 
         responses.add(
             responses.POST,
@@ -1037,7 +1083,7 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
         addon = self._create_dummy_target()
         for _ in range(0, 6):
             addon.authors.add(user_factory())
-        cinder_addon = self.cinder_class(addon)
+        cinder_addon = self.CinderClass(addon)
 
         responses.add(
             responses.POST,
@@ -1051,58 +1097,68 @@ class TestCinderAddon(BaseTestCinderCase, TestCase):
 
 @override_switch('dsa-abuse-reports-review', active=True)
 @override_switch('dsa-appeals-review', active=True)
+@override_switch('dsa-cinder-forwarded-review', active=True)
 class TestCinderAddonHandledByReviewers(TestCinderAddon):
-    cinder_class = CinderAddonHandledByReviewers
-    # Expected queries is a bit larger here because of activity log and
-    # needs human review checks + insertion.
-    # - 1 Fetch Version
-    # - 2 Fetch Translations for that Version
-    # - 3 Fetch NeedsHumanReview
-    # - 4 Create NeedsHumanReview
-    # - 5 Fetch NeedsHumanReview
-    # - 6 Update due date on Versions
-    # - 7 Fetch Latest signed Version
-    # - 8 Create ActivityLog
-    # - 9 Create ActivityLogComment
-    # - 10 Update ActivityLogComment
-    # - 11 Create VersionLog
-    # The last 2 are for rendering the payload to Cinder like CinderAddon:
-    # - 12 Fetch Addon authors
-    # - 13 Fetch Promoted Addon
-    expected_queries_for_report = 13
+    CinderClass = CinderAddonHandledByReviewers
+    # For rendering the payload to Cinder like CinderAddon:
+    # - 1 Fetch Addon authors
+    # - 2 Fetch Promoted Addon
+    expected_queries_for_report = 2
     expected_queue_suffix = 'addon-infringement'
 
-    def test_queue(self):
-        super().test_queue()
-        # For this class the property should be guaranteed to be static.
-        assert self.cinder_class.queue == 'amo-env-addon-infringement'
-
-    def test_queue_theme(self):
+    def test_queue_with_theme(self):
         # Contrary to reports handled by Cinder moderators, for reports handled
         # by AMO reviewers the queue should remain the same regardless of the
         # addon-type.
         target = self._create_dummy_target(type=amo.ADDON_STATICTHEME)
-        cinder_entity = self.cinder_class(target)
+        cinder_entity = self.CinderClass(target)
         assert cinder_entity.queue_suffix == self.expected_queue_suffix
         assert (
             cinder_entity.queue
             == f'{settings.CINDER_QUEUE_PREFIX}{cinder_entity.queue_suffix}'
         )
 
+    def test_queue_appeal(self):
+        # Contrary to reports handled by Cinder moderators, for reports handled
+        # by AMO reviewers there is no special queue.
+        BaseTestCinderCase.test_queue_appeal(self)
+
     def setUp(self):
-        core.set_user(user_factory(id=settings.TASK_USER_ID))
+        self.task_user = user_factory(id=settings.TASK_USER_ID)
 
     def test_report(self):
         addon = self._create_dummy_target()
-        addon.current_version.file.update(is_signed=True)
+        # Make sure this is testing the case where no user is set (we fall back
+        # to the task user).
+        assert core.get_user() is None
         # Trigger switch_is_active to ensure it's cached to make db query
         # count more predictable.
         waffle.switch_is_active('dsa-abuse-reports-review')
         self._test_report(addon)
+        # Adding the NHR is done by post_report().
+        assert addon.current_version.needshumanreview_set.count() == 0
+        job = CinderJob.objects.create(job_id='1234-xyz')
+        cinder_instance = self.CinderClass(addon)
+        with self.assertNumQueries(13):
+            # - 1 Fetch Cinder Decision
+            # - 2 Fetch NeedsHumanReview
+            # - 3 Create NeedsHumanReview
+            # - 4 Query if due_date is needed for version
+            # - 5 Query existing versions for due dates to inherit
+            # - 6 Update due date on Version
+            # - 7 Query existing review queue history for that version
+            # - 8 Insert review queue history for that version
+            # - 9 Fetch task user
+            # - 10 Create ActivityLog
+            # - 11 Update ActivityLog
+            # - 12 Create ActivityLogComment
+            # - 13 Create VersionLog
+            cinder_instance.post_report(job)
         assert (
             addon.current_version.needshumanreview_set.get().reason
             == NeedsHumanReview.REASONS.ABUSE_ADDON_VIOLATION
         )
+        assert addon.current_version.reload().due_date
         assert ActivityLog.objects.for_versions(addon.current_version).filter(
             action=amo.LOG.NEEDS_HUMAN_REVIEW_CINDER.id
         )
@@ -1110,7 +1166,6 @@ class TestCinderAddonHandledByReviewers(TestCinderAddon):
     @override_switch('dsa-abuse-reports-review', active=False)
     def test_report_waffle_switch_off(self):
         addon = self._create_dummy_target()
-        addon.current_version.file.update(is_signed=True)
         # Trigger switch_is_active to ensure it's cached to make db query
         # count more predictable.
         waffle.switch_is_active('dsa-abuse-reports-review')
@@ -1123,10 +1178,8 @@ class TestCinderAddonHandledByReviewers(TestCinderAddon):
 
     def test_report_with_version(self):
         addon = self._create_dummy_target()
-        addon.current_version.file.update(is_signed=True)
         other_version = version_factory(
-            addon=addon,
-            file_kw={'is_signed': True, 'status': amo.STATUS_AWAITING_REVIEW},
+            addon=addon, file_kw={'status': amo.STATUS_AWAITING_REVIEW}
         )
         responses.add(
             responses.POST,
@@ -1138,55 +1191,175 @@ class TestCinderAddonHandledByReviewers(TestCinderAddon):
             guid=addon.guid, addon_version=other_version.version
         )
         report = CinderReport(abuse_report)
-        cinder_instance = self.cinder_class(addon, other_version)
+        cinder_instance = self.CinderClass(addon, version_string=other_version.version)
         assert cinder_instance.report(report=report, reporter=None)
-        assert cinder_instance.report(report=report, reporter=None)
+        job = CinderJob.objects.create(job_id='1234-xyz')
         assert not addon.current_version.needshumanreview_set.exists()
-        # We called report() multiple times but there should be only one
+        cinder_instance.post_report(job)
+        cinder_instance.post_report(job)
+        cinder_instance.post_report(job)
+        # We called post_report() multiple times but there should be only one
         # needs human review instance.
         assert (
             other_version.needshumanreview_set.get().reason
             == NeedsHumanReview.REASONS.ABUSE_ADDON_VIOLATION
         )
+        assert other_version.reload().due_date
 
     def test_appeal_anonymous(self):
         addon = self._create_dummy_target()
-        addon.current_version.file.update(is_signed=True)
         self._test_appeal(
-            CinderUnauthenticatedReporter('itsme', 'm@r.io'), self.cinder_class(addon)
+            CinderUnauthenticatedReporter('itsme', 'm@r.io'),
+            cinder_entity_instance=self.CinderClass(addon),
         )
         assert (
             addon.current_version.needshumanreview_set.get().reason
-            == NeedsHumanReview.REASONS.ABUSE_ADDON_VIOLATION_APPEAL
+            == NeedsHumanReview.REASONS.ADDON_REVIEW_APPEAL
         )
+        assert addon.current_version.reload().due_date
 
     def test_appeal_logged_in(self):
         addon = self._create_dummy_target()
-        addon.current_version.file.update(is_signed=True)
-        self._test_appeal(CinderUser(user_factory()), self.cinder_class(addon))
+        self._test_appeal(
+            CinderUser(user_factory()), cinder_entity_instance=self.CinderClass(addon)
+        )
         assert (
             addon.current_version.needshumanreview_set.get().reason
-            == NeedsHumanReview.REASONS.ABUSE_ADDON_VIOLATION_APPEAL
+            == NeedsHumanReview.REASONS.ADDON_REVIEW_APPEAL
         )
+        assert addon.current_version.reload().due_date
+
+    def test_appeal_specific_version_from_report(self):
+        """For an appeal from a reporter, version_string is set on the CinderClass
+        instance, from AbuseReport.addon_version_string. If version_string is defined,
+        and the version exists, we should flag that version rather than current_version.
+        """
+        addon = self._create_dummy_target()
+        other_version = version_factory(
+            addon=addon,
+            channel=amo.CHANNEL_UNLISTED,
+            file_kw={'status': amo.STATUS_AWAITING_REVIEW},
+        )
+        self._test_appeal(
+            CinderUser(user_factory()),
+            cinder_entity_instance=self.CinderClass(
+                addon, version_string=other_version.version
+            ),
+        )
+        assert not addon.current_version.needshumanreview_set.exists()
+        assert (
+            other_version.needshumanreview_set.get().reason
+            == NeedsHumanReview.REASONS.ADDON_REVIEW_APPEAL
+        )
+        assert not addon.current_version.reload().due_date
+        assert other_version.reload().due_date
+
+    def test_appeal_specific_version_from_action(self):
+        """For an appeal from a developer, version_string will be None on the
+        CinderClass instance. If version_string is falsey we collect and flag the addon
+        versions from the appealled decision rather the current_version."""
+        addon = self._create_dummy_target()
+        flagged_version = version_factory(
+            addon=addon,
+            channel=amo.CHANNEL_UNLISTED,
+            file_kw={'status': amo.STATUS_AWAITING_REVIEW},
+        )
+        decision = ContentDecision.objects.create(
+            action=DECISION_ACTIONS.AMO_DISABLE_ADDON, cinder_id='some_id', addon=addon
+        )
+        # An activity log links the flagged_version to the decision, even though the
+        # version_string on the CinderClass below is set to None
+        ActivityLog.objects.create(
+            amo.LOG.FORCE_DISABLE, addon, flagged_version, decision, user=user_factory()
+        )
+        self._test_appeal(
+            CinderUser(user_factory()),
+            cinder_entity_instance=self.CinderClass(addon, version_string=None),
+            appealed_decision_id=decision.cinder_id,
+        )
+        assert not addon.current_version.needshumanreview_set.exists()
+        assert (
+            flagged_version.needshumanreview_set.get().reason
+            == NeedsHumanReview.REASONS.ADDON_REVIEW_APPEAL
+        )
+        assert not addon.current_version.reload().due_date
+        assert flagged_version.reload().due_date
+
+    def test_appeal_no_current_version(self):
+        addon = self._create_dummy_target(
+            status=amo.STATUS_NULL, file_kw={'status': amo.STATUS_DISABLED}
+        )
+        version = addon.versions.last()
+        assert not addon.current_version
+        self._test_appeal(
+            CinderUser(user_factory()),
+            cinder_entity_instance=self.CinderClass(addon),
+        )
+        assert (
+            version.needshumanreview_set.get().reason
+            == NeedsHumanReview.REASONS.ADDON_REVIEW_APPEAL
+        )
+        assert version.reload().due_date
 
     @override_switch('dsa-appeals-review', active=False)
     def test_appeal_waffle_switch_off(self):
         addon = self._create_dummy_target()
-        addon.current_version.file.update(is_signed=True)
         # We are no longer doing the queries for the activitylog, needshumanreview
         # etc since the waffle switch is off. So we're back to the same number of
         # queries made by the reports that go to Cinder.
         self.expected_queries_for_report = TestCinderAddon.expected_queries_for_report
-        self._test_appeal(CinderUser(user_factory()), self.cinder_class(addon))
+        self._test_appeal(
+            CinderUser(user_factory()), cinder_entity_instance=self.CinderClass(addon)
+        )
+        assert addon.current_version.needshumanreview_set.count() == 0
+
+    def test_report_with_ongoing_appeal(self):
+        addon = self._create_dummy_target()
+        job = CinderJob.objects.create(job_id='1234-xyz')
+        job.appealed_decisions.add(
+            ContentDecision.objects.create(
+                addon=addon,
+                cinder_id='1234-decision',
+                action=DECISION_ACTIONS.AMO_REJECT_VERSION_ADDON,
+            )
+        )
+        # Trigger switch_is_active to ensure it's cached to make db query
+        # count more predictable.
+        waffle.switch_is_active('dsa-abuse-reports-review')
+        self._test_report(addon)
+        cinder_instance = self.CinderClass(addon)
+        cinder_instance.post_report(job)
+        # The add-on does not get flagged again while the appeal is ongoing.
+        assert addon.current_version.needshumanreview_set.count() == 0
+
+    def test_report_with_ongoing_forwarded_appeal(self):
+        addon = self._create_dummy_target()
+        job = CinderJob.objects.create(job_id='1234-xyz')
+        CinderJob.objects.create(forwarded_to_job=job)
+        job.appealed_decisions.add(
+            ContentDecision.objects.create(
+                addon=addon,
+                cinder_id='1234-decision',
+                action=DECISION_ACTIONS.AMO_REJECT_VERSION_ADDON,
+            )
+        )
+        # Trigger switch_is_active to ensure it's cached to make db query
+        # count more predictable.
+        waffle.switch_is_active('dsa-abuse-reports-review')
+        self._test_report(addon)
+        cinder_instance = self.CinderClass(addon)
+        cinder_instance.post_report(job)
+        # The add-on does not get flagged again while the appeal is ongoing.
         assert addon.current_version.needshumanreview_set.count() == 0
 
     def test_create_decision(self):
         target = self._create_dummy_target()
 
+        cinder_id = uuid.uuid4().hex
         responses.add(
             responses.POST,
             f'{settings.CINDER_SERVER_URL}create_decision',
-            json={'uuid': '123'},
+            json={'uuid': cinder_id},
             status=201,
         )
         responses.add(
@@ -1195,14 +1368,14 @@ class TestCinderAddonHandledByReviewers(TestCinderAddon):
             json={'error': 'reason'},
             status=400,
         )
-        cinder_instance = self.cinder_class(target)
+        cinder_instance = self.CinderClass(target)
         assert (
             cinder_instance.create_decision(
                 action=DECISION_ACTIONS.AMO_REJECT_VERSION_ADDON.api_value,
                 reasoning='some review text',
                 policy_uuids=['12345678'],
             )
-            == '123'
+            == cinder_id
         )
         request = responses.calls[0].request
         request_body = json.loads(request.body)
@@ -1223,11 +1396,12 @@ class TestCinderAddonHandledByReviewers(TestCinderAddon):
     def test_create_job_decision(self):
         target = self._create_dummy_target()
         job = CinderJob.objects.create(job_id='1234')
+        cinder_id = uuid.uuid4().hex
 
         responses.add(
             responses.POST,
             f'{settings.CINDER_SERVER_URL}jobs/{job.job_id}/decision',
-            json={'uuid': '123'},
+            json={'uuid': cinder_id},
             status=201,
         )
         responses.add(
@@ -1236,7 +1410,7 @@ class TestCinderAddonHandledByReviewers(TestCinderAddon):
             json={'error': 'reason'},
             status=400,
         )
-        cinder_instance = self.cinder_class(target)
+        cinder_instance = self.CinderClass(target)
         assert (
             cinder_instance.create_job_decision(
                 job_id=job.job_id,
@@ -1244,7 +1418,7 @@ class TestCinderAddonHandledByReviewers(TestCinderAddon):
                 reasoning='some review text',
                 policy_uuids=['12345678'],
             )
-            == '123'
+            == cinder_id
         )
         request = responses.calls[0].request
         request_body = json.loads(request.body)
@@ -1265,7 +1439,7 @@ class TestCinderAddonHandledByReviewers(TestCinderAddon):
 
     def test_close_job(self):
         target = self._create_dummy_target()
-        job_id = '123'
+        job_id = uuid.uuid4().hex
         responses.add(
             responses.POST,
             f'{settings.CINDER_SERVER_URL}jobs/{job_id}/cancel',
@@ -1278,12 +1452,266 @@ class TestCinderAddonHandledByReviewers(TestCinderAddon):
             json={'error': 'reason'},
             status=400,
         )
-        cinder_instance = self.cinder_class(target)
+        cinder_instance = self.CinderClass(target)
         assert cinder_instance.close_job(job_id=job_id) == job_id
+
+    def _setup_post_queue_move_test(self):
+        addon = self._create_dummy_target()
+        listed_version = addon.current_version
+        unlisted_version = version_factory(addon=addon, channel=amo.CHANNEL_UNLISTED)
+        ActivityLog.objects.all().delete()
+        cinder_instance = self.CinderClass(addon)
+        cinder_job = CinderJob.objects.create(target_addon=addon, job_id='1')
+        AbuseReport.objects.create(
+            reason=AbuseReport.REASONS.HATEFUL_VIOLENT_DECEPTIVE,
+            guid=addon.guid,
+            cinder_job=cinder_job,
+            reporter_email='email@domain.com',
+        )
+        AbuseReport.objects.create(
+            reason=AbuseReport.REASONS.HATEFUL_VIOLENT_DECEPTIVE,
+            guid=addon.guid,
+            cinder_job=cinder_job,
+            reporter=user_factory(),
+        )
+        return cinder_instance, cinder_job, listed_version, unlisted_version
+
+    def _check_post_queue_move_test(self, listed_version, unlisted_version):
+        assert listed_version.addon.reload().status == amo.STATUS_APPROVED
+        assert (
+            listed_version.reload().needshumanreview_set.get().reason
+            == NeedsHumanReview.REASONS.CINDER_ESCALATION
+        )
+        assert not unlisted_version.reload().needshumanreview_set.exists()
+        assert listed_version.reload().due_date
+        assert not unlisted_version.reload().due_date
+        assert ActivityLog.objects.count() == 1
+        activity = ActivityLog.objects.filter(
+            action=amo.LOG.NEEDS_HUMAN_REVIEW_CINDER.id
+        ).get()
+        assert activity.arguments == [listed_version]
+        assert activity.user == self.task_user
+
+    def test_post_queue_move(self):
+        cinder_instance, cinder_job, listed_version, unlisted_version = (
+            self._setup_post_queue_move_test()
+        )
+
+        cinder_instance.post_queue_move(job=cinder_job)
+
+        self._check_post_queue_move_test(listed_version, unlisted_version)
+
+    def test_post_queue_move_appeal(self):
+        cinder_instance, cinder_job, listed_version, _ = (
+            self._setup_post_queue_move_test()
+        )
+        appeal = CinderJob.objects.create(job_id='an appeal job')
+        cinder_job.update(
+            decision=ContentDecision.objects.create(
+                action=DECISION_ACTIONS.AMO_DISABLE_ADDON,
+                addon=cinder_instance.addon,
+                appeal_job=appeal,
+            )
+        )
+        cinder_instance.post_queue_move(job=appeal)
+        assert (
+            listed_version.reload().needshumanreview_set.get().reason
+            == NeedsHumanReview.REASONS.CINDER_APPEAL_ESCALATION
+        )
+
+    def test_post_queue_move_specific_version(self):
+        # but if we have a version specified, we flag that version
+        cinder_instance, cinder_job, listed_version, unlisted_version = (
+            self._setup_post_queue_move_test()
+        )
+        other_version = version_factory(
+            addon=listed_version.addon, file_kw={'status': amo.STATUS_DISABLED}
+        )
+        assert not other_version.due_date
+        cinder_job.abusereport_set.update(addon_version=other_version.version)
+        ActivityLog.objects.all().delete()
+
+        cinder_instance.post_queue_move(job=cinder_job)
+
+        assert not listed_version.reload().needshumanreview_set.exists()
+        assert not unlisted_version.reload().needshumanreview_set.exists()
+        assert other_version.reload().due_date
+        assert (
+            other_version.needshumanreview_set.get().reason
+            == NeedsHumanReview.REASONS.CINDER_ESCALATION
+        )
+        assert ActivityLog.objects.count() == 1
+        activity = ActivityLog.objects.get(action=amo.LOG.NEEDS_HUMAN_REVIEW_CINDER.id)
+        assert activity.arguments == [other_version]
+        assert activity.user == self.task_user
+
+    def test_workflow_recreate(self):
+        cinder_instance, cinder_job, listed_version, unlisted_version = (
+            self._setup_post_queue_move_test()
+        )
+        responses.add(
+            responses.POST,
+            f'{settings.CINDER_SERVER_URL}create_report',
+            json={'job_id': '2'},
+            status=201,
+        )
+
+        assert cinder_instance.workflow_recreate(notes='foo', job=cinder_job) == '2'
+        assert json.loads(responses.calls[0].request.body)['reasoning'] == 'foo'
+
+        self._check_post_queue_move_test(listed_version, unlisted_version)
+
+    def test_post_queue_move_no_versions_to_flag(self):
+        cinder_instance, cinder_job, listed_version, unlisted_version = (
+            self._setup_post_queue_move_test()
+        )
+        NeedsHumanReview.objects.create(
+            reason=NeedsHumanReview.REASONS.CINDER_ESCALATION, version=listed_version
+        )
+        NeedsHumanReview.objects.create(
+            reason=NeedsHumanReview.REASONS.CINDER_ESCALATION, version=unlisted_version
+        )
+        assert NeedsHumanReview.objects.count() == 2
+        ActivityLog.objects.all().delete()
+
+        cinder_instance.post_queue_move(job=cinder_job)
+        assert NeedsHumanReview.objects.count() == 2
+        assert ActivityLog.objects.count() == 0
+
+    def test_workflow_recreate_no_versions_to_flag(self):
+        cinder_instance, cinder_job, listed_version, unlisted_version = (
+            self._setup_post_queue_move_test()
+        )
+        NeedsHumanReview.objects.create(
+            reason=NeedsHumanReview.REASONS.CINDER_ESCALATION, version=listed_version
+        )
+        NeedsHumanReview.objects.create(
+            reason=NeedsHumanReview.REASONS.CINDER_ESCALATION, version=unlisted_version
+        )
+        assert NeedsHumanReview.objects.count() == 2
+        ActivityLog.objects.all().delete()
+        responses.add(
+            responses.POST,
+            f'{settings.CINDER_SERVER_URL}create_report',
+            json={'job_id': '2'},
+            status=201,
+        )
+        assert cinder_instance.workflow_recreate(notes=None, job=cinder_job) == '2'
+        assert NeedsHumanReview.objects.count() == 2
+        assert ActivityLog.objects.count() == 0
+
+    @override_switch('dsa-cinder-forwarded-review', active=False)
+    def test_post_queue_move_waffle_switch_off(self):
+        # Escalation when the waffle switch is off is essentially a no-op on
+        # AMO side.
+        cinder_instance, cinder_job, listed_version, unlisted_version = (
+            self._setup_post_queue_move_test()
+        )
+
+        cinder_instance.post_queue_move(job=cinder_job)
+
+        assert listed_version.addon.reload().status == amo.STATUS_APPROVED
+        assert not listed_version.reload().needshumanreview_set.exists()
+        assert not listed_version.due_date
+        assert not unlisted_version.reload().needshumanreview_set.exists()
+        assert not unlisted_version.due_date
+        assert ActivityLog.objects.count() == 0
+
+        other_version = version_factory(
+            addon=listed_version.addon,
+            file_kw={'status': amo.STATUS_DISABLED},
+        )
+        assert not other_version.due_date
+        ActivityLog.objects.all().delete()
+        cinder_job.abusereport_set.update(addon_version=other_version.version)
+        cinder_instance.post_queue_move(job=cinder_job)
+        assert not listed_version.reload().needshumanreview_set.exists()
+        assert not unlisted_version.reload().needshumanreview_set.exists()
+        other_version.reload()
+        assert not other_version.due_date
+        assert not listed_version.reload().needshumanreview_set.exists()
+        assert not unlisted_version.reload().needshumanreview_set.exists()
+
+    @override_switch('dsa-cinder-forwarded-review', active=False)
+    def test_workflow_recreate_waffle_switch_off(self):
+        cinder_instance, cinder_job, listed_version, unlisted_version = (
+            self._setup_post_queue_move_test()
+        )
+        responses.add(
+            responses.POST,
+            f'{settings.CINDER_SERVER_URL}create_report',
+            json={'job_id': '2'},
+            status=201,
+        )
+        assert cinder_instance.workflow_recreate(notes='', job=cinder_job) == '2'
+
+        assert listed_version.addon.reload().status == amo.STATUS_APPROVED
+        assert not listed_version.reload().needshumanreview_set.exists()
+        assert not listed_version.due_date
+        assert not unlisted_version.reload().needshumanreview_set.exists()
+        assert not unlisted_version.due_date
+        assert ActivityLog.objects.count() == 0
+
+
+class TestCinderAddonHandledByLegal(TestCinderAddon):
+    CinderClass = CinderAddonHandledByLegal
+    # For rendering the payload to Cinder like CinderAddon:
+    # - 1 Fetch Addon authors
+    # - 2 Fetch Promoted Addon
+    expected_queries_for_report = 2
+    expected_queue_suffix = None
+
+    def test_queue(self):
+        extension = self._create_dummy_target()
+        assert self.CinderClass(extension).queue == 'legal-escalations'
+
+    def test_queue_appeal(self):
+        extension = self._create_dummy_target()
+        assert self.CinderClass(extension).queue_appeal == 'legal-escalations'
+
+    def test_queue_with_theme(self):
+        # Contrary to reports handled by Cinder moderators, for reports handled
+        # by legal the queue should remain the same regardless of the
+        # addon-type.
+        target = self._create_dummy_target(type=amo.ADDON_STATICTHEME)
+        assert self.CinderClass(target).queue_appeal == 'legal-escalations'
+
+    def test_workflow_recreate(self):
+        """Test that a job is created in the legal queue."""
+        # Specifically create signed files because there are some circumstances where we
+        # filter out unsigned files from NeedsHumanReview and we don't want a false
+        # positive.
+        addon = self._create_dummy_target(file_kw={'is_signed': True})
+        listed_version = addon.current_version
+        unlisted_version = version_factory(
+            addon=addon, channel=amo.CHANNEL_UNLISTED, file_kw={'is_signed': True}
+        )
+        cinder_instance = self.CinderClass(addon)
+        cinder_job = CinderJob.objects.create(target_addon=addon, job_id='1')
+        responses.add(
+            responses.POST,
+            f'{settings.CINDER_SERVER_URL}create_report',
+            json={'job_id': '2'},
+            status=201,
+        )
+
+        assert cinder_instance.workflow_recreate(notes='foo', job=cinder_job) == '2'
+
+        # Check that we've not inadvertently changed the status
+        assert listed_version.addon.reload().status == amo.STATUS_APPROVED
+        # And check there have been no needshumanreview instances created or activity
+        # - only reviewer tools handled jobs should generated needshumanreviews
+        assert not listed_version.reload().needshumanreview_set.exists()
+        assert not unlisted_version.reload().needshumanreview_set.exists()
+        assert (
+            ActivityLog.objects.filter(action=amo.LOG.NEEDS_HUMAN_REVIEW.id).count()
+            == 0
+        )
+        assert json.loads(responses.calls[0].request.body)['reasoning'] == 'foo'
 
 
 class TestCinderUser(BaseTestCinderCase, TestCase):
-    cinder_class = CinderUser
+    CinderClass = CinderUser
     # 2 queries expected:
     # - Related add-ons
     # - Number of listed add-ons
@@ -1301,7 +1729,7 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
             homepage='http://home.example.com',
         )
         message = ' bad person!'
-        cinder_user = self.cinder_class(user)
+        cinder_user = self.CinderClass(user)
         encoded_message = cinder_user.get_str(message)
         abuse_report = AbuseReport.objects.create(user=user, message=message)
 
@@ -1335,6 +1763,8 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
                             'message': encoded_message,
                             'reason': None,
                             'considers_illegal': False,
+                            'illegal_category': None,
+                            'illegal_subcategory': None,
                         },
                         'entity_type': 'amo_report',
                     }
@@ -1368,6 +1798,8 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
                         'message': encoded_message,
                         'reason': None,
                         'considers_illegal': False,
+                        'illegal_category': None,
+                        'illegal_subcategory': None,
                     },
                     'entity_type': 'amo_report',
                 },
@@ -1413,6 +1845,8 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
                         'message': encoded_message,
                         'reason': None,
                         'considers_illegal': False,
+                        'illegal_category': None,
+                        'illegal_subcategory': None,
                     },
                     'entity_type': 'amo_report',
                 },
@@ -1448,7 +1882,7 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
     def test_build_report_payload_with_author_and_reporter_being_the_same(self):
         user = self._create_dummy_target()
         addon = addon_factory(users=[user])
-        cinder_user = self.cinder_class(user)
+        cinder_user = self.CinderClass(user)
         message = 'I dont like this guy'
         encoded_message = cinder_user.get_str(message)
         abuse_report = AbuseReport.objects.create(user=user, message=message)
@@ -1480,6 +1914,8 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
                         'message': encoded_message,
                         'reason': None,
                         'considers_illegal': False,
+                        'illegal_category': None,
+                        'illegal_subcategory': None,
                     },
                     'entity_type': 'amo_report',
                 },
@@ -1522,7 +1958,7 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
     def test_build_report_payload_addon_author(self):
         user = self._create_dummy_target()
         addon = addon_factory(users=[user])
-        cinder_user = self.cinder_class(user)
+        cinder_user = self.CinderClass(user)
         message = '@bad person!'
         encoded_message = cinder_user.get_str(message)
         abuse_report = AbuseReport.objects.create(user=user, message=message)
@@ -1554,6 +1990,8 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
                         'message': encoded_message,
                         'reason': None,
                         'considers_illegal': False,
+                        'illegal_category': None,
+                        'illegal_subcategory': None,
                     },
                     'entity_type': 'amo_report',
                 },
@@ -1605,6 +2043,8 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
                         'message': encoded_message,
                         'reason': None,
                         'considers_illegal': False,
+                        'illegal_category': None,
+                        'illegal_subcategory': None,
                     },
                     'entity_type': 'amo_report',
                 },
@@ -1662,7 +2102,7 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
         user.update(picture_type='image/png')
 
         message = '=bad person!'
-        cinder_user = self.cinder_class(user)
+        cinder_user = self.CinderClass(user)
         encoded_message = cinder_user.get_str(message)
         abuse_report = AbuseReport.objects.create(user=user, message=message)
 
@@ -1700,6 +2140,8 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
                             'message': encoded_message,
                             'reason': None,
                             'considers_illegal': False,
+                            'illegal_category': None,
+                            'illegal_subcategory': None,
                         },
                         'entity_type': 'amo_report',
                     }
@@ -1730,7 +2172,7 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
         user = self._create_dummy_target()
         for _ in range(0, 6):
             user.addons.add(addon_factory())
-        cinder_user = self.cinder_class(user)
+        cinder_user = self.CinderClass(user)
         message = 'report for lots of relationships'
         abuse_report = AbuseReport.objects.create(user=user, message=message)
         data = cinder_user.build_report_payload(
@@ -1780,6 +2222,8 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
                         'message': 'report for lots of relationships',
                         'reason': None,
                         'considers_illegal': False,
+                        'illegal_category': None,
+                        'illegal_subcategory': None,
                     },
                     'entity_type': 'amo_report',
                 },
@@ -1814,7 +2258,7 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
         user = self._create_dummy_target()
         for _ in range(0, 6):
             user.addons.add(addon_factory())
-        cinder_user = self.cinder_class(user)
+        cinder_user = self.CinderClass(user)
 
         responses.add(
             responses.POST,
@@ -1934,7 +2378,7 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
         user = self._create_dummy_target()
         for _ in range(0, 6):
             user.addons.add(addon_factory())
-        cinder_user = self.cinder_class(user)
+        cinder_user = self.CinderClass(user)
 
         responses.add(
             responses.POST,
@@ -1947,7 +2391,7 @@ class TestCinderUser(BaseTestCinderCase, TestCase):
 
 
 class TestCinderRating(BaseTestCinderCase, TestCase):
-    cinder_class = CinderRating
+    CinderClass = CinderRating
     expected_queries_for_report = 1  # For the author
     expected_queue_suffix = 'ratings'
 
@@ -1962,7 +2406,7 @@ class TestCinderRating(BaseTestCinderCase, TestCase):
 
     def test_build_report_payload(self):
         rating = self._create_dummy_target()
-        cinder_rating = self.cinder_class(rating)
+        cinder_rating = self.CinderClass(rating)
         message = '-bad rating!'
         encoded_message = cinder_rating.get_str(message)
         abuse_report = AbuseReport.objects.create(rating=rating, message=message)
@@ -2000,6 +2444,8 @@ class TestCinderRating(BaseTestCinderCase, TestCase):
                             'message': encoded_message,
                             'reason': None,
                             'considers_illegal': False,
+                            'illegal_category': None,
+                            'illegal_subcategory': None,
                         },
                         'entity_type': 'amo_report',
                     },
@@ -2026,7 +2472,7 @@ class TestCinderRating(BaseTestCinderCase, TestCase):
     def test_build_report_payload_with_author_and_reporter_being_the_same(self):
         rating = self._create_dummy_target()
         user = rating.user
-        cinder_rating = self.cinder_class(rating)
+        cinder_rating = self.CinderClass(rating)
         message = '@my own words!'
         encoded_message = cinder_rating.get_str(message)
         abuse_report = AbuseReport.objects.create(rating=rating, message=message)
@@ -2064,6 +2510,8 @@ class TestCinderRating(BaseTestCinderCase, TestCase):
                             'message': encoded_message,
                             'reason': None,
                             'considers_illegal': False,
+                            'illegal_category': None,
+                            'illegal_subcategory': None,
                         },
                         'entity_type': 'amo_report',
                     },
@@ -2103,7 +2551,7 @@ class TestCinderRating(BaseTestCinderCase, TestCase):
         rating = Rating.objects.create(
             addon=self.addon, user=addon_author, reply_to=original_rating
         )
-        cinder_rating = self.cinder_class(rating)
+        cinder_rating = self.CinderClass(rating)
         message = '-bad reply!'
         encoded_message = cinder_rating.get_str(message)
         abuse_report = AbuseReport.objects.create(rating=rating, message=message)
@@ -2150,6 +2598,8 @@ class TestCinderRating(BaseTestCinderCase, TestCase):
                             'message': encoded_message,
                             'reason': None,
                             'considers_illegal': False,
+                            'illegal_category': None,
+                            'illegal_subcategory': None,
                         },
                         'entity_type': 'amo_report',
                     },
@@ -2182,7 +2632,7 @@ class TestCinderRating(BaseTestCinderCase, TestCase):
 
 
 class TestCinderCollection(BaseTestCinderCase, TestCase):
-    cinder_class = CinderCollection
+    CinderClass = CinderCollection
     expected_queries_for_report = 1  # For the author
     expected_queue_suffix = 'collections'
 
@@ -2206,7 +2656,7 @@ class TestCinderCollection(BaseTestCinderCase, TestCase):
 
     def test_build_report_payload(self):
         collection = self._create_dummy_target()
-        cinder_collection = self.cinder_class(collection)
+        cinder_collection = self.CinderClass(collection)
         message = '@bad collection!'
         encoded_message = cinder_collection.get_str(message)
         abuse_report = AbuseReport.objects.create(
@@ -2237,6 +2687,8 @@ class TestCinderCollection(BaseTestCinderCase, TestCase):
                             'message': encoded_message,
                             'reason': None,
                             'considers_illegal': False,
+                            'illegal_category': None,
+                            'illegal_subcategory': None,
                         },
                         'entity_type': 'amo_report',
                     },
@@ -2274,7 +2726,7 @@ class TestCinderCollection(BaseTestCinderCase, TestCase):
 
     def test_build_report_payload_with_author_and_reporter_being_the_same(self):
         collection = self._create_dummy_target()
-        cinder_collection = self.cinder_class(collection)
+        cinder_collection = self.CinderClass(collection)
         user = collection.author
         message = '=Collect me!'
         encoded_message = cinder_collection.get_str(message)
@@ -2306,6 +2758,8 @@ class TestCinderCollection(BaseTestCinderCase, TestCase):
                             'message': encoded_message,
                             'reason': None,
                             'considers_illegal': False,
+                            'illegal_category': None,
+                            'illegal_subcategory': None,
                         },
                         'entity_type': 'amo_report',
                     },
@@ -2350,41 +2804,47 @@ class TestCinderCollection(BaseTestCinderCase, TestCase):
 
 
 class TestCinderReport(TestCase):
-    cinder_class = CinderReport
+    CinderClass = CinderReport
 
     def test_reason_in_attributes(self):
         abuse_report = AbuseReport.objects.create(
             guid=addon_factory().guid,
             reason=AbuseReport.REASONS.POLICY_VIOLATION,
         )
-        assert self.cinder_class(abuse_report).get_attributes() == {
+        assert self.CinderClass(abuse_report).get_attributes() == {
             'id': str(abuse_report.pk),
             'created': str(abuse_report.created),
             'locale': None,
             'message': '',
             'reason': "DSA: It violates Mozilla's Add-on Policies",
             'considers_illegal': False,
+            'illegal_category': None,
+            'illegal_subcategory': None,
         }
 
     def test_locale_in_attributes(self):
         abuse_report = AbuseReport.objects.create(
             guid=addon_factory().guid, application_locale='en_US'
         )
-        assert self.cinder_class(abuse_report).get_attributes() == {
+        assert self.CinderClass(abuse_report).get_attributes() == {
             'id': str(abuse_report.pk),
             'created': str(abuse_report.created),
             'locale': 'en_US',
             'message': '',
             'reason': None,
             'considers_illegal': False,
+            'illegal_category': None,
+            'illegal_subcategory': None,
         }
 
     def test_considers_illegal(self):
         abuse_report = AbuseReport.objects.create(
             guid=addon_factory().guid,
             reason=AbuseReport.REASONS.ILLEGAL,
+            illegal_category=ILLEGAL_CATEGORIES.ANIMAL_WELFARE,
+            illegal_subcategory=ILLEGAL_SUBCATEGORIES.OTHER,
         )
-        assert self.cinder_class(abuse_report).get_attributes() == {
+        assert self.CinderClass(abuse_report).get_attributes() == {
             'id': str(abuse_report.pk),
             'created': str(abuse_report.created),
             'locale': None,
@@ -2393,4 +2853,6 @@ class TestCinderReport(TestCase):
                 'DSA: It violates the law or contains content that violates the law'
             ),
             'considers_illegal': True,
+            'illegal_category': 'STATEMENT_CATEGORY_ANIMAL_WELFARE',
+            'illegal_subcategory': 'KEYWORD_OTHER',
         }

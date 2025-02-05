@@ -15,16 +15,23 @@ fi
 
 OLYMPIA_USER="olympia"
 
-if [[ -n "${HOST_UID:-}" ]]; then
+function get_olympia_uid() { echo "$(id -u "$OLYMPIA_USER")"; }
+function get_olympia_gid() { echo "$(id -g "$OLYMPIA_USER")"; }
+
+OLD_HOST_UID=$(get_olympia_uid)
+
+# If the olympia user's uid is different in the container than from the build,
+# we need to update the olympia user's uid to match the new one.
+if [[ "${HOST_UID}" != "${OLD_HOST_UID}" ]]; then
   usermod -u ${HOST_UID} ${OLYMPIA_USER}
-  echo "${OLYMPIA_USER} UID: ${OLYMPIA_UID} -> ${HOST_UID}"
+  echo "${OLYMPIA_USER} UID: ${OLD_HOST_UID} -> ${HOST_UID}"
 fi
 
-uid=$(id -u $OLYMPIA_USER)
-gid=$(id -g $OLYMPIA_USER)
+NEW_HOST_UID=$(get_olympia_uid)
+OLYMPIA_ID_STRING="${NEW_HOST_UID}:$(get_olympia_gid)"
 
 cat <<EOF | su -s /bin/bash $OLYMPIA_USER
-  echo "Running command as ${OLYMPIA_USER} ${uid}:${gid}"
+  echo "Running command as ${OLYMPIA_USER} ${OLYMPIA_ID_STRING}"
   set -xue
   $@
 EOF

@@ -56,7 +56,7 @@ class IPAddressBinaryField(VarBinaryField):
             # bytestring - i.e. what's stored in the db; or an IPv4Address|IPv6Address.
             return ipaddress.ip_address(value) if value is not None else None
         except Exception as exc:
-            raise exceptions.ValidationError(exc)
+            raise exceptions.ValidationError(exc) from exc
 
     def get_prep_value(self, value):
         return self.to_python(value).packed if value is not None else None
@@ -85,10 +85,10 @@ class ReCaptchaField(UpstreamReCaptchaField):
 def validate_cidr(value):
     try:
         ipaddress.ip_network(value)
-    except ValueError:
+    except ValueError as exc:
         raise exceptions.ValidationError(
             _('Enter a valid IP4 or IP6 network.'), code='invalid'
-        )
+        ) from exc
 
 
 class CIDRField(models.Field):
@@ -120,9 +120,13 @@ class CIDRField(models.Field):
         value = value.strip()
 
         try:
-            return ipaddress.ip_network(value)
+            # We pass strict=False to allow networks with host bits from the
+            # database to avoid generating an exception even though they should
+            # not have passed validation in case they were added by automation.
+            # It should still represent the correct network anyway.
+            return ipaddress.ip_network(value, strict=False)
         except Exception as exc:
-            raise exceptions.ValidationError(exc)
+            raise exceptions.ValidationError(exc) from exc
 
     def get_prep_lookup(self, lookup_type, value):
         if lookup_type == 'exact':
@@ -139,3 +143,8 @@ class CIDRField(models.Field):
         defaults = {'form_class': fields.CharField, 'validators': self.validators}
         defaults.update(kwargs)
         return super().formfield(**defaults)
+
+
+class PositiveTinyIntegerField(models.PositiveSmallIntegerField):
+    def db_type(self, connection):
+        return 'tinyint unsigned'

@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 
 from django.utils import translation
@@ -31,8 +32,9 @@ class AddonQueryParam:
     valid_values = None
     es_field = None
 
-    def __init__(self, query_data):
-        self.query_data = query_data
+    def __init__(self, request):
+        self.request = request
+        self.query_data = request.GET
 
     def get_value(self):
         value = self.query_data.get(self.query_param, '')
@@ -77,8 +79,9 @@ class AddonQueryMultiParam:
     valid_values = None  # if None then all values are valid
     es_field = None
 
-    def __init__(self, query_data):
-        self.query_data = query_data
+    def __init__(self, request):
+        self.query_data = request.GET
+        self.request = request
 
     def process_value(self, value):
         try:
@@ -185,7 +188,7 @@ class AddonAppVersionQueryParam(AddonQueryParam):
 
     def get_values(self):
         appversion = self.query_data.get(self.query_param)
-        app = AddonAppQueryParam(self.query_data).get_value()
+        app = AddonAppQueryParam(self.request).get_value()
 
         if appversion and app:
             # Get a min version less than X.0, and a max greater than X.0a
@@ -265,10 +268,10 @@ class AddonGuidQueryParam(AddonQueryMultiParam):
                 value = force_str(urlsafe_base64_decode(force_str(value[4:])))
                 if not amo.ADDON_GUID_PATTERN.match(value):
                     raise ValueError()
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as exc:
                 raise ValueError(
                     gettext('Invalid Return To AMO guid (not in base64url format?)')
-                )
+                ) from exc
             # Filter on the now decoded guid param as normal...
             filters = super().get_es_query([value])
             # If the switch to enable all listed add-ons for RTAMO is on, we
@@ -277,7 +280,10 @@ class AddonGuidQueryParam(AddonQueryMultiParam):
             if not switch_is_active('return-to-amo-for-all-listed'):
                 filters.extend(
                     AddonPromotedQueryParam(
-                        {AddonPromotedQueryParam.query_param: BADGED_API_NAME}
+                        self.request,
+                        query_data={
+                            AddonPromotedQueryParam.query_param: BADGED_API_NAME
+                        },
                     ).get_es_query()
                 )
             return filters
@@ -308,9 +314,9 @@ class AddonCategoryQueryParam(AddonQueryParam):
         # dict in the categories constants and use that as the reverse dict,
         # and make sure to use get_value_from_object_from_reverse_dict().
         try:
-            types = AddonTypeQueryParam(self.query_data).get_values()
+            types = AddonTypeQueryParam(request).get_values()
             self.reverse_dict = [CATEGORIES[type_] for type_ in types]
-        except KeyError:
+        except KeyError as exc:
             raise ValueError(
                 gettext(
                     'Invalid combination of "%s" and "%s" parameters.'
@@ -319,7 +325,7 @@ class AddonCategoryQueryParam(AddonQueryParam):
                         self.query_param,
                     )
                 )
-            )
+            ) from exc
 
     def get_value(self):
         value = super().get_value()
@@ -391,14 +397,27 @@ class AddonPromotedQueryParam(AddonQueryMultiParam):
     reverse_dict = PROMOTED_API_NAME_TO_IDS
     valid_values = PROMOTED_API_NAME_TO_IDS.values()
 
+    def __init__(self, request, query_data=None):
+        super().__init__(request)
+        if query_data is not None:
+            self.query_data = query_data
+
     def get_values(self):
-        values = super().get_values()
+        obsolete = (
+            ('verified', 'sponsored')
+            if is_gate_active(self.request, 'promoted-verified-sponsored')
+            else ()
+        )
+        values = str(self.query_data.get(self.query_param, '')).split(',')
+        processed_values = [
+            self.process_value(value) for value in values if value not in obsolete
+        ]
         # The values are lists of ids so flatten into a single list
-        return list({y for x in values for y in x})
+        return list({y for x in processed_values for y in x})
 
     def get_app(self):
         return (
-            AddonAppQueryParam(self.query_data).get_value()
+            AddonAppQueryParam(self.request).get_value()
             if AddonAppQueryParam.query_param in self.query_data
             else None
         )
@@ -415,21 +434,31 @@ class AddonPromotedQueryParam(AddonQueryMultiParam):
 class AddonColorQueryParam(AddonQueryParam):
     query_param = 'color'
 
-    def convert_to_hsl(self, hexvalue):
+    def convert_to_hex(self, color):
+        color = re.sub(r'[^0-9A-Fa-f]', '', color)[:6]
+        if len(color) == 3:
+            color = ''.join(2 * c for c in color)
+        if len(color) != 6:
+            raise ValueError
+        else:
+            return color
+
+    def convert_to_hsl(self, color):
         # The API is receiving color as a hex string. We store colors in HSL
         # as colorgram generates it (which is on a 0 to 255 scale for each
         # component), so some conversion is necessary.
-        if len(hexvalue) == 3:
-            hexvalue = ''.join(2 * c for c in hexvalue)
         try:
+            hexvalue = self.convert_to_hex(color)
             rgb = tuple(bytearray.fromhex(hexvalue))
-        except ValueError:
-            rgb = (0, 0, 0)
+        except ValueError as err:
+            raise ValueError(
+                gettext('Invalid "%s" parameter.' % self.query_param)
+            ) from err
         return colorgram.colorgram.hsl(*rgb)
 
     def get_value(self):
         color = self.query_data.get(self.query_param, '')
-        return self.convert_to_hsl(color.upper().lstrip('#'))
+        return self.convert_to_hsl(color) if color else None
 
     def get_es_query(self):
         # Thresholds for saturation & luminosity that dictate which query to
@@ -439,6 +468,9 @@ class AddonColorQueryParam(AddonQueryParam):
         HIGH_LUMINOSITY = 255 * 98 / 100.0
 
         hsl = self.get_value()
+        if not hsl:
+            return []
+
         if hsl[1] <= LOW_SATURATION:
             # If we're given a color with a very low saturation, the user is
             # searching for a black/white/grey and we need to take saturation
@@ -936,9 +968,9 @@ class SearchParameterFilter(BaseFilterBackend):
                 # present in the request, otherwise don't, to avoid raising
                 # exceptions because of missing params in complex filters.
                 if param_class.query_param in request.GET:
-                    clauses.extend(param_class(request.GET).get_es_query())
+                    clauses.extend(param_class(request).get_es_query())
             except ValueError as exc:
-                raise serializers.ValidationError(*exc.args)
+                raise serializers.ValidationError(*exc.args) from exc
         return clauses
 
     def filter_queryset(self, request, qs, view):
@@ -1061,8 +1093,8 @@ class SortingFilter(BaseFilterBackend):
 
         try:
             order_by = [self.SORTING_PARAMS[name] for name in split_sort_params]
-        except KeyError:
-            raise serializers.ValidationError('Invalid "sort" parameter.')
+        except KeyError as exc:
+            raise serializers.ValidationError('Invalid "sort" parameter.') from exc
 
         return qs.sort(*order_by)
 

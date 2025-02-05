@@ -32,6 +32,7 @@ from olympia.api.fields import (
 )
 from olympia.api.serializers import AMOModelSerializer, BaseESSerializer
 from olympia.api.utils import is_gate_active
+from olympia.api.validators import NoURLsValidator
 from olympia.applications.models import AppVersion
 from olympia.bandwagon.models import Collection
 from olympia.constants.applications import APP_IDS, APPS_ALL
@@ -84,6 +85,7 @@ from .validators import (
     CanSetCompatibilityValidator,
     MatchingGuidValidator,
     NoFallbackDefaultLocaleValidator,
+    NoThemesValidator,
     ReviewedSourceFileValidator,
     VerifyMozillaTrademark,
     VersionAddonMetadataValidator,
@@ -200,6 +202,7 @@ class PreviewSerializer(AMOModelSerializer):
             'thumbnail_size',
             'thumbnail_url',
         )
+        validators = (NoThemesValidator(),)
 
     def get_image_url(self, obj):
         return absolutify(obj.image_url)
@@ -212,13 +215,6 @@ class PreviewSerializer(AMOModelSerializer):
         request = self.context.get('request', None)
         if request and is_gate_active(request, 'del-preview-position'):
             data.pop('position', None)
-        return data
-
-    def validate(self, data):
-        if self.context['view'].get_addon_object().type == amo.ADDON_STATICTHEME:
-            raise exceptions.ValidationError(
-                gettext('Previews cannot be created for themes.')
-            )
         return data
 
     def create(self, validated_data):
@@ -504,7 +500,7 @@ class DeveloperVersionSerializer(VersionSerializer):
         try:
             self.parsed_data = parse_addon(value, addon=self.addon, user=request.user)
         except DuplicateAddonID as exc:
-            raise Conflict({self.field_name: exc.messages})
+            raise Conflict({self.field_name: exc.messages}) from exc
         return value
 
     def validate_is_disabled(self, disable):
@@ -566,13 +562,13 @@ class DeveloperVersionSerializer(VersionSerializer):
             try:
                 ReviewedSourceFileValidator()(data['source'], self.fields['source'])
             except exceptions.ValidationError as exc:
-                raise exceptions.ValidationError({'source': exc.detail})
+                raise exceptions.ValidationError({'source': exc.detail}) from exc
 
         if 'compatible_apps' in data:
             try:
                 self._post_validate_compatibility(data['compatible_apps'])
             except exceptions.ValidationError as exc:
-                raise exceptions.ValidationError({'compatibility': exc.detail})
+                raise exceptions.ValidationError({'compatibility': exc.detail}) from exc
 
         return data
 
@@ -793,11 +789,11 @@ class CurrentVersionSerializer(SimpleVersionSerializer):
         try:
             # AddonAppVersionQueryParam.get_values() returns (app_id, min, max)
             # but we want {'min': min, 'max': max}.
-            value = AddonAppVersionQueryParam(request.GET).get_values()
+            value = AddonAppVersionQueryParam(request).get_values()
             application = value[0]
             appversions = dict(zip(('min', 'max'), value[1:], strict=True))
         except ValueError as exc:
-            raise exceptions.ParseError(str(exc))
+            raise exceptions.ParseError(str(exc)) from exc
 
         version_qs = Version.objects.latest_public_compatible_with(
             application, appversions
@@ -838,6 +834,19 @@ class AddonEulaPolicySerializer(AMOModelSerializer):
             'eula',
             'privacy_policy',
         )
+        validators = (NoThemesValidator(),)
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+
+        if validated_data:
+            ActivityLog.objects.create(
+                amo.LOG.EDIT_PROPERTIES,
+                instance,
+                details=list(validated_data.keys()),
+                user=self.context['request'].user,
+            )
+        return instance
 
 
 class UserSerializerWithPictureUrl(BaseUserSerializer):
@@ -904,11 +913,23 @@ class AddonPendingAuthorSerializer(AddonAuthorSerializer):
         writeable_fields = ('addon', 'user_id', 'listed', 'role')
         read_only_fields = tuple(set(fields) - set(writeable_fields))
 
+    def validate_role(self, value):
+        # We inherit from AddonAuthorSerializer but the check it does to ensure
+        # a owner is left doesn't make sense here - we are only inviting
+        # someone new.
+        return value
+
+    def validate_listed(self, value):
+        # We inherit from AddonAuthorSerializer but the check it does to ensure
+        # a listed user is left doesn't make sense here - we are only inviting
+        # someone new.
+        return value
+
     def validate_user_id(self, value):
         try:
             user = UserProfile.objects.get(id=value)
-        except UserProfile.DoesNotExist:
-            raise exceptions.ValidationError(gettext('Account not found.'))
+        except UserProfile.DoesNotExist as exc:
+            raise exceptions.ValidationError(gettext('Account not found.')) from exc
 
         if not EmailUserRestriction.allow_email(
             user.email, restriction_type=RESTRICTION_TYPES.ADDON_SUBMISSION
@@ -929,13 +950,13 @@ class AddonPendingAuthorSerializer(AddonAuthorSerializer):
                 raise DjangoValidationError('')  # raise so we can catch below.
             for validator in user._meta.get_field('display_name').validators:
                 validator(user.display_name)
-        except DjangoValidationError:
+        except DjangoValidationError as exc:
             raise exceptions.ValidationError(
                 gettext(
                     'The account needs a display name before it can be added as an '
                     'author.'
                 )
-            )
+            ) from exc
 
         return value
 
@@ -1008,7 +1029,7 @@ class AddonSerializer(AMOModelSerializer):
     )
     summary = TranslationSerializerField(
         required=False,
-        validators=[OneOrMoreLetterOrNumberCharacterValidator()],
+        validators=[OneOrMoreLetterOrNumberCharacterValidator(), NoURLsValidator()],
     )
     support_email = EmailTranslationField(required=False)
     support_url = OutgoingURLTranslationField(required=False)

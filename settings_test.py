@@ -23,6 +23,8 @@ INTERNAL_ROUTES_ALLOWED = env('INTERNAL_ROUTES_ALLOWED', default=False)
 IN_TEST_SUITE = True
 
 DEBUG = False
+# We should default to production mode unless otherwise specified
+DEV_MODE = False
 
 # We won't actually send an email.
 SEND_REAL_EMAIL = True
@@ -81,6 +83,7 @@ CELERY_TASK_ALWAYS_EAGER = True
 CELERY_IMPORTS += (
     'olympia.amo.tests.test_celery',
     'olympia.search.tests.test_commands',
+    'olympia.devhub.tests.test_tasks',
 )
 
 CELERY_TASK_ROUTES.update(
@@ -90,6 +93,7 @@ CELERY_TASK_ROUTES.update(
         'olympia.amo.tests.test_celery.fake_task_with_result': {'queue': 'amo'},
         'olympia.amo.tests.test_celery.sleeping_task': {'queue': 'amo'},
         'olympia.search.tests.test_commands.dummy_task': {'queue': 'amo'},
+        'olympia.devhub.tests.test_tasks.fake_task': {'queue': 'amo'},
     }
 )
 
@@ -106,3 +110,6 @@ CINDER_QUEUE_PREFIX = 'amo-env-'
 SOCKET_LABS_TOKEN = 'fake-test-token'
 SOCKET_LABS_SERVER_ID = '12345'
 SOCKET_LABS_HOST = 'https://fake-socketlabs.com/v1/'
+
+# This is a testing environment
+TESTING_ENV = True

@@ -31,6 +31,9 @@
     Use the fields below to upload your add-on package. After upload, a series
     of automated validation tests will be run on your file.
   {% endtrans %}
+  {% trans max_size=max_upload_size|filesizeformat %}
+  The maximum file size accepted is {{ max_size }}. If your add-on is larger than {{ max_size }}, it will fail validation.
+  {% endtrans %}
   </p>
   <section id="upload-file">
 
@@ -47,6 +50,7 @@
       data-upload-url="{{ url('devhub.upload_unlisted') }}"
     {% endif %}
   {% endif %}
+  data-max-upload-size="{{ max_upload_size }}"
   >
   {{ new_addon_form.theme_specific }}
   {{ new_addon_form.non_field_errors() }}
@@ -83,7 +87,14 @@
     </div>
     {% endif %}
 
-    <div class="submission-buttons addon-submission-field">
+    {% if 'recaptcha' in new_addon_form.fields %}
+    <p>
+      {{ new_addon_form.recaptcha }}
+      {{ new_addon_form.recaptcha.errors }}
+    </p>
+    {% endif %}
+
+    <div id="submission-field" class="submission-buttons addon-submission-field" data-submissions-enabled="{{ submissions_enabled|json }}">
       <button class="addon-upload-dependant" id="submit-upload-file-finish" disabled=disabled type="submit">
         {{ _('Continue') }}
       </button>

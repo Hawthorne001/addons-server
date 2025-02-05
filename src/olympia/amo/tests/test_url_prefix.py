@@ -33,11 +33,16 @@ class MiddlewareTest(TestCase):
             '/addon/1': '/en-US/firefox/addon/1',
             # Check an invalid locale.
             '/sda/firefox/addon/1': '/en-US/firefox/addon/1',
-            # Check a consolidated language (e.g. es-* -> es).
-            '/es-ES/firefox/addon/1': '/es/firefox/addon/1',
-            '/es-PE/firefox/addon/1': '/es/firefox/addon/1',
+            # Check a consolidated language (e.g. fr-* -> fr).
+            '/fr-FR/firefox/addon/1': '/fr/firefox/addon/1',
+            '/fr-CA/firefox/addon/1': '/fr/firefox/addon/1',
             # /developers doesn't get an app.
             '/developers': '/en-US/developers',
+            # Shorter locales redirects to long form
+            '/pt/developers': '/pt-PT/developers',
+            '/pt/firefox': '/pt-PT/firefox/',
+            '/pt/firefox/addon/1': '/pt-PT/firefox/addon/1',
+            '/pt/addon/1': '/pt-PT/firefox/addon/1',
             # Check basic use-cases with a 'lang' GET parameter:
             '/?lang=fr': '/fr/firefox/',
             '/addon/1/?lang=fr': '/fr/firefox/addon/1/',
@@ -152,7 +157,7 @@ class MiddlewareTest(TestCase):
             '/en-US/extensions/?foo=fooval&bar=barval&lang=fr',
             '/fr/firefox/extensions/?foo=fooval&bar=barval',
         )
-        check('/en-US/firefox?lang=es-PE', '/es/firefox/')
+        check('/en-US/firefox?lang=fr-CA', '/fr/firefox/')
 
 
 class TestPrefixer(TestCase):
@@ -362,7 +367,7 @@ def test_outgoing_url_javascript_scheme():
         ('ga-IE,en;q=0.8,fr;q=0.6', 'ga-IE'),
         ('fr-fr, en;q=0.8, es;q=0.2', 'fr'),
         # Consolidated languages.
-        ('es-PE', 'es'),
+        ('fr-CA', 'fr'),
     ],
 )
 def test_parse_accept_language(test_input, expected):

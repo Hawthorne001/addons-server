@@ -1,3 +1,8 @@
+import logging
+import os
+import shutil
+
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from celery import chord, group
@@ -143,3 +148,81 @@ class ProcessObjectsCommand(BaseCommand):
             else:
                 ts = group(grouping)
             ts.apply_async()
+
+
+storage_structure = {
+    'files': '',
+    'shared_storage': {
+        'tmp': {
+            'addons': '',
+            'data': '',
+            'file_viewer': '',
+            'guarded-addons': '',
+            'icon': '',
+            'log': '',
+            'persona_header': '',
+            'preview': '',
+            'test': '',
+            'uploads': '',
+        },
+        'uploads': '',
+    },
+}
+
+
+class BaseDataCommand(BaseCommand):
+    # Settings for django-dbbackup
+    data_backup_dirname = os.path.abspath(os.path.join(settings.ROOT, 'backups'))
+    data_backup_init = '_init'
+    data_backup_db_filename = 'db.sql'
+    data_backup_storage_filename = 'storage.tar'
+
+    logger = logging
+
+    def backup_dir_path(self, name):
+        return os.path.abspath(os.path.join(self.data_backup_dirname, name))
+
+    def backup_db_path(self, name):
+        return os.path.abspath(
+            os.path.join(self.backup_dir_path(name), self.data_backup_db_filename)
+        )
+
+    def backup_storage_path(self, name):
+        return os.path.abspath(
+            os.path.join(self.backup_dir_path(name), self.data_backup_storage_filename)
+        )
+
+    def clean_dir(self, name: str) -> None:
+        path = self.backup_dir_path(name)
+        logging.info(f'Clearing {path}')
+        shutil.rmtree(path, ignore_errors=True)
+
+    def make_dir(self, name: str, force: bool = False) -> None:
+        path = self.backup_dir_path(name)
+        path_exists = os.path.exists(path)
+
+        if path_exists:
+            if force:
+                self.clean_dir(name)
+            else:
+                raise CommandError(
+                    f'path {path} already exists.' 'Use --force to overwrite.'
+                )
+
+        os.makedirs(path, exist_ok=True)
+
+    def _clean_storage(
+        self, root: str, dir_dict: dict[str, str | dict], clean: bool = False
+    ) -> None:
+        for key, value in dir_dict.items():
+            curr_path = os.path.join(root, key)
+            if isinstance(value, dict):
+                self._clean_storage(curr_path, value, clean=clean)
+            else:
+                if clean:
+                    shutil.rmtree(curr_path, ignore_errors=True)
+                os.makedirs(curr_path, exist_ok=True)
+
+    def make_storage(self, clean: bool = False):
+        self.logger.info('Making storage...')
+        self._clean_storage(settings.STORAGE_ROOT, storage_structure, clean=clean)

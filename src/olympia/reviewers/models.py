@@ -4,10 +4,11 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from django.core.cache import cache
 from django.db import models
-from django.db.models import Q
+from django.db.models import Avg, Q
 from django.dispatch import receiver
 from django.template import loader
 from django.urls import reverse
+from django.utils.functional import cached_property
 
 from extended_choices import Choices
 
@@ -25,6 +26,7 @@ from olympia.users.models import UserProfile
 from olympia.users.utils import get_task_user
 from olympia.versions.models import Version, version_uploaded
 from olympia.versions.utils import get_staggered_review_due_date_generator
+from olympia.zadmin.models import get_config
 
 
 user_log = olympia.core.logger.getLogger('z.users')
@@ -37,7 +39,10 @@ VIEW_QUEUE_FLAGS = (
         'needs_admin_theme_review',
         'Needs Admin Static Theme Review',
     ),
-    ('sources_provided', 'Source Code Provided'),
+    (
+        'sources_provided',
+        'Source Code Provided',
+    ),
     (
         'auto_approval_disabled',
         'Auto-approval disabled',
@@ -61,6 +66,40 @@ VIEW_QUEUE_FLAGS = (
     (
         'auto_approval_delayed_indefinitely_unlisted',
         'Unlisted Auto-approval delayed indefinitely',
+    ),
+    # The following are annotations set by AddonManager.get_queryset_for_pending_queues
+    # See VersionManager.get_due_date_reason_q_objects for the names
+    (
+        'needs_human_review_from_cinder',
+        'Abuse report forwarded from Cinder',
+    ),
+    (
+        'needs_human_review_from_abuse',
+        'Abuse report',
+    ),
+    (
+        'needs_human_review_from_appeal',
+        'Appeal on decision',
+    ),
+    (
+        'is_from_theme_awaiting_review',
+        'Theme version',
+    ),
+    (
+        'needs_human_review_promoted',
+        'Promoted add-on',
+    ),
+    (
+        'needs_human_review_auto_approval_disabled',
+        'Auto-approval disabled',
+    ),
+    (
+        'needs_human_review_other',
+        'Other NeedsHumanReview flag',
+    ),
+    (
+        'has_developer_reply',
+        'Outstanding developer reply',
     ),
 )
 
@@ -88,7 +127,7 @@ def set_reviewing_cache(addon_id, user_id):
 def get_flags(addon, version):
     """Return a list of tuples (indicating which flags should be displayed for
     a particular add-on."""
-    flag_filters_by_channel = {
+    exclude_flags_by_channel = {
         amo.CHANNEL_UNLISTED: (
             'auto_approval_disabled',
             'auto_approval_delayed_temporarily',
@@ -105,22 +144,11 @@ def get_flags(addon, version):
         for (prop, title) in VIEW_QUEUE_FLAGS
         if getattr(version, prop, getattr(addon, prop, None))
         and prop
-        not in flag_filters_by_channel.get(getattr(version, 'channel', None), ())
+        not in exclude_flags_by_channel.get(getattr(version, 'channel', None), ())
     ]
     # add in the promoted group flag and return
     if promoted := addon.promoted_group(currently_approved=False):
         flags.append((f'promoted-{promoted.api_name}', promoted.name))
-    if getattr(addon, 'needs_human_review_from_cinder', False):
-        flags.append(
-            (
-                'needs-human-review-from-cinder',
-                'Abuse report forwarded from Cinder present',
-            )
-        )
-    if getattr(addon, 'needs_human_review_from_abuse', False):
-        flags.append(('needs-human-review-from-abuse', 'Abuse report present'))
-    if getattr(addon, 'needs_human_review_from_appeal', False):
-        flags.append(('needs-human-review-from-appeal', 'Appeal on decision present'))
     return flags
 
 
@@ -169,7 +197,6 @@ class ReviewerSubscription(ModelBase):
             subject,
             template.render(context),
             recipient_list=[self.user.email],
-            from_email=settings.ADDONS_EMAIL,
             use_deny_list=False,
         )
 
@@ -239,6 +266,9 @@ class AutoApprovalSummary(ModelBase):
     is_blocked = models.BooleanField(
         default=False, help_text='Version string and guid match a blocklist Block'
     )
+    is_pending_rejection = models.BooleanField(
+        default=False, help_text='Is pending rejection'
+    )
     verdict = models.PositiveSmallIntegerField(
         choices=amo.AUTO_APPROVAL_VERDICT_CHOICES, default=amo.NOT_AUTO_APPROVED
     )
@@ -264,6 +294,7 @@ class AutoApprovalSummary(ModelBase):
         'is_promoted_prereview',
         'should_be_delayed',
         'is_blocked',
+        'is_pending_rejection',
     )
 
     def __str__(self):
@@ -451,8 +482,8 @@ class AutoApprovalSummary(ModelBase):
             old_version = self.find_previous_confirmed_version()
             old_size = find_code_size(old_version) if old_version else 0
             new_size = find_code_size(self.version)
-        except FileValidation.DoesNotExist:
-            raise AutoApprovalNoValidationResultError()
+        except FileValidation.DoesNotExist as exc:
+            raise AutoApprovalNoValidationResultError() from exc
         # We don't really care about whether it's a negative or positive change
         # in size, we just need the absolute value (if there is no current
         # public version, that value ends up being the total code size of the
@@ -499,8 +530,8 @@ class AutoApprovalSummary(ModelBase):
     def _count_linter_flag(cls, version, flag):
         try:
             validation = version.file.validation
-        except FileValidation.DoesNotExist:
-            raise AutoApprovalNoValidationResultError()
+        except FileValidation.DoesNotExist as exc:
+            raise AutoApprovalNoValidationResultError() from exc
         validation_data = json.loads(validation.validation)
         return sum(
             flag in message['id'] for message in validation_data.get('messages', [])
@@ -510,8 +541,8 @@ class AutoApprovalSummary(ModelBase):
     def _count_metadata_property(cls, version, prop):
         try:
             validation = version.file.validation
-        except FileValidation.DoesNotExist:
-            raise AutoApprovalNoValidationResultError()
+        except FileValidation.DoesNotExist as exc:
+            raise AutoApprovalNoValidationResultError() from exc
         validation_data = json.loads(validation.validation)
         return len(validation_data.get('metadata', {}).get(prop, []))
 
@@ -630,11 +661,17 @@ class AutoApprovalSummary(ModelBase):
             content_review = addon.addonapprovalscounter.last_content_review
         except AddonApprovalsCounter.DoesNotExist:
             content_review = None
+        INITIAL_AUTO_APPROVAL_DELAY_FOR_LISTED = get_config(
+            'INITIAL_AUTO_APPROVAL_DELAY_FOR_LISTED',
+            default=24 * 60 * 60,
+            int_value=True,
+        )
         return (
             not is_langpack
             and version.channel == amo.CHANNEL_LISTED
             and version.addon.status == amo.STATUS_NOMINATED
-            and now - version.created < timedelta(hours=24)
+            and now - version.created
+            < timedelta(seconds=INITIAL_AUTO_APPROVAL_DELAY_FOR_LISTED)
             and content_review is None
         )
 
@@ -644,6 +681,13 @@ class AutoApprovalSummary(ModelBase):
         would have been prevented, but if it was uploaded before the Block was
         created, it's possible it'll still be pending."""
         return version.is_blocked
+
+    @classmethod
+    def check_is_pending_rejection(cls, version):
+        """Check whether the version is pending rejection. We don't
+        auto-approve those versions, since it would just be confusing as they
+        are eventually going to be rejected automatically anyway."""
+        return bool(version.pending_rejection)
 
     @classmethod
     def create_summary_for_version(cls, version, dry_run=False):
@@ -718,6 +762,14 @@ class ReviewActionReason(ModelBase):
 
     class Meta:
         ordering = ('name',)
+        constraints = [
+            models.CheckConstraint(
+                name='either_canned_response_or_canned_block_reason_must_be_set',
+                check=(
+                    ~models.Q(canned_response='') | ~models.Q(canned_block_reason='')
+                ),
+            )
+        ]
 
     def __str__(self):
         return str(self.name)
@@ -737,8 +789,10 @@ class UsageTier(ModelBase):
         blank=True,
         default=None,
         null=True,
-        help_text='Usage growth percentage threshold before we start automatically '
-        'flagging the add-on for human review.',
+        help_text='Percentage point increase in growth over the average in that tier '
+        'before we start automatically flagging the add-on for human review. For '
+        'example, if set to 50 and the average hotness in that tier is 0.01, '
+        'add-ons over 0.51 hotness get flagged.',
     )
     abuse_reports_ratio_threshold_before_flagging = models.IntegerField(
         blank=True,
@@ -755,6 +809,50 @@ class UsageTier(ModelBase):
     def __str__(self):
         return self.name
 
+    @classmethod
+    def get_base_addons(cls):
+        """Return base queryset of add-ons we consider when we look at growth
+        thresholds.
+
+        This is a classmethod, it is not specific to a particular tier."""
+        return Addon.unfiltered.exclude(status=amo.STATUS_DISABLED).filter(
+            type=amo.ADDON_EXTENSION
+        )
+
+    def get_tier_boundaries(self):
+        """Return boundaries used to filter add-ons for that tier instance."""
+        return {
+            'average_daily_users__gte': self.lower_adu_threshold,
+            'average_daily_users__lt': self.upper_adu_threshold,
+        }
+
+    @cached_property
+    def average_growth(self):
+        return (
+            self.get_base_addons()
+            .filter(**self.get_tier_boundaries())
+            .aggregate(Avg('hotness', default=0))
+            .get('hotness__avg', 0)
+        )
+
+    def get_growth_threshold(self):
+        """Return the growth threshold for that tier.
+
+        The value is computed from the average growth (hotness) of add-ons in
+        that tier plus the growth_threshold_before_flagging converted to
+        decimal.
+
+        It has a floor of 0."""
+        return max(0, self.average_growth + self.growth_threshold_before_flagging / 100)
+
+    def get_growth_threshold_q_object(self):
+        """Return Q object containing filters to apply to find add-ons over the
+        computed growth threshold for that tier."""
+        return Q(
+            hotness__gt=self.get_growth_threshold(),
+            **self.get_tier_boundaries(),
+        )
+
 
 class NeedsHumanReview(ModelBase):
     """Model holding information about why a version was flagged for human
@@ -763,7 +861,7 @@ class NeedsHumanReview(ModelBase):
     REASONS = Choices(
         ('UNKNOWN', 0, 'Unknown'),
         ('SCANNER_ACTION', 1, 'Hit scanner rule'),
-        ('PROMOTED_GROUP', 2, 'Belongs to a promoted group'),
+        ('ADDED_TO_PROMOTED_GROUP', 2, 'Was added to a promoted group'),
         ('HOTNESS_THRESHOLD', 3, 'Over growth threshold for usage tier'),
         ('INHERITANCE', 4, 'Previous version in channel had needs human review set'),
         (
@@ -786,9 +884,21 @@ class NeedsHumanReview(ModelBase):
         ('CINDER_ESCALATION', 10, 'Escalated for an abuse report, via cinder'),
         ('ABUSE_ADDON_VIOLATION', 11, 'Reported for abuse within the add-on'),
         (
-            'ABUSE_ADDON_VIOLATION_APPEAL',
+            'ADDON_REVIEW_APPEAL',
             12,
             "Appeal of a reviewer's decision about a policy violation",
+        ),
+        ('AUTO_APPROVAL_DISABLED', 13, 'Has auto-approval disabled'),
+        ('BELONGS_TO_PROMOTED_GROUP', 14, 'Belongs to a promoted group'),
+        ('CINDER_APPEAL_ESCALATION', 15, 'Escalated appeal via cinder'),
+    )
+    REASONS.add_subset(
+        'ABUSE_OR_APPEAL_RELATED',
+        (
+            'CINDER_ESCALATION',
+            'ABUSE_ADDON_VIOLATION',
+            'ADDON_REVIEW_APPEAL',
+            'CINDER_APPEAL_ESCALATION',
         ),
     )
 
@@ -835,6 +945,34 @@ class NeedsHumanReview(ModelBase):
             )
 
 
+class ReviewQueueHistory(ModelBase):
+    # Note: a given Version can enter & leave the queue multiple times, and we
+    # want to track each occurence, so it's not a OneToOneField.
+    version = models.ForeignKey(Version, on_delete=models.CASCADE)
+    original_due_date = models.DateTimeField(
+        help_text='Original due date when the version entered the queue',
+    )
+    exit_date = models.DateTimeField(
+        default=None,
+        null=True,
+        blank=True,
+        help_text='When the version left the queue (regardless of reason)',
+    )
+    review_decision_log = models.ForeignKey(
+        'activity.ActivityLog',
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        help_text=(
+            'Activity Log associated with the reviewer decision that caused '
+            'the version to leave the queue'
+        ),
+    )
+
+    class Meta:
+        verbose_name_plural = 'Review Queue Histories'
+
+
 @receiver(
     models.signals.post_save,
     sender=NeedsHumanReview,
@@ -845,3 +983,19 @@ def update_due_date_for_needs_human_review_change(
 ):
     if update_fields is None or 'is_active' in update_fields:
         instance.version.reset_due_date()
+
+
+class QueueCount(models.Model):
+    date = models.DateField(auto_now_add=True)
+    name = models.CharField(max_length=255)
+    value = models.IntegerField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=('name', 'date'), name='queue_count_unique_name_date'
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.name} for {self.date}: {self.value}'

@@ -3,6 +3,7 @@ import zipfile
 from datetime import datetime, timedelta
 from unittest import mock
 
+from django.conf import settings
 from django.core import mail
 from django.core.files import temp
 from django.core.files.base import File as DjangoFile
@@ -17,6 +18,7 @@ from olympia.addons.models import Addon
 from olympia.amo.templatetags.jinja_helpers import absolutify
 from olympia.amo.tests import (
     TestCase,
+    block_factory,
     create_default_webext_appversion,
     formset,
     initial,
@@ -25,6 +27,7 @@ from olympia.amo.tests import (
     version_factory,
 )
 from olympia.applications.models import AppVersion
+from olympia.blocklist.models import BlockType
 from olympia.constants.promoted import RECOMMENDED
 from olympia.files.models import File
 from olympia.reviewers.models import AutoApprovalSummary
@@ -75,6 +78,34 @@ class TestVersion(TestCase):
         self.addon.update(status=amo.STATUS_APPROVED, disabled_by_user=True)
         doc = self.get_doc()
         assert doc('.addon-status .status-disabled').text() == ('Invisible')
+
+    def test_blocked_version(self):
+        task_user = UserProfile.objects.get(pk=settings.TASK_USER_ID)
+        v3 = version_factory(addon=self.addon, version='3.0')
+        v4 = version_factory(addon=self.addon, version='4.0.1')
+        block_factory(version_ids=[v3.pk, v4.pk], updated_by=task_user)
+        for version in (v3, v4):
+            version.file.update(status=amo.STATUS_DISABLED)
+        doc = self.get_doc()
+        assert (
+            doc('#version-list .file-status-text')[0].text_content().strip()
+            == 'Blocked'
+        )
+        assert (
+            doc('#version-list .file-status-text')[1].text_content().strip()
+            == 'Blocked'
+        )
+
+        v4.blockversion.update(block_type=BlockType.SOFT_BLOCKED)
+        doc = self.get_doc()
+        assert (
+            doc('#version-list .file-status-text')[0].text_content().strip()
+            == 'Restricted'
+        )
+        assert (
+            doc('#version-list .file-status-text')[1].text_content().strip()
+            == 'Blocked'
+        )
 
     def test_label_open_marked_safe(self):
         doc = self.get_doc()
@@ -282,7 +313,6 @@ class TestVersion(TestCase):
         version_two = version_factory(
             addon=self.addon,
             license=version.license,
-            version='1.2.3',
             file_kw={'status': status},
         )
         return version_two, version_two.file
@@ -599,16 +629,13 @@ class TestVersion(TestCase):
         doc = pq(response.content)
 
         show_links = doc('.review-history-show')
-        assert show_links.length == 3
+        assert show_links.length == 2
         assert show_links[0].attrib['data-div'] == '#%s-review-history' % v1.id
-        assert not show_links[1].attrib.get('data-div')
-        assert show_links[2].attrib['data-div'] == '#%s-review-history' % v2.id
+        assert show_links[1].attrib['data-div'] == '#%s-review-history' % v2.id
 
-        # All 3 links will have a 'data-version' attribute.
+        # Both links will have a 'data-version' attribute.
         assert show_links[0].attrib['data-version'] == str(v1.id)
-        # But the 2nd link will point to the latest version in the channel.
         assert show_links[1].attrib['data-version'] == str(v2.id)
-        assert show_links[2].attrib['data-version'] == str(v2.id)
 
         # Test review history
         review_history_td = doc('#%s-review-history' % v1.id)[0]
@@ -625,17 +652,22 @@ class TestVersion(TestCase):
         # No counter, because we don't have any pending activity to show.
         assert pending_activity_count.length == 0
 
-        reply_api_url = absolutify(
-            reverse_ns('version-reviewnotes-list', args=[self.addon.id, v2.id])
-        )
-        # Reply box div is there (only one)
-        assert doc('.dev-review-reply-form').length == 1
-        review_form = doc('.dev-review-reply-form')[0]
-        assert review_form.attrib['action'] == reply_api_url
-        assert review_form.attrib['data-session-id'] == self.client.session.session_key
-        assert review_form.attrib['data-history'] == '#%s-review-history' % v2.id
-        textarea = doc('.dev-review-reply-form textarea')[0]
-        assert textarea.attrib['maxlength'] == '100000'
+        # Reply box div is there for each version
+        assert doc('.dev-review-reply-form').length == 2
+        for idx, version in enumerate([v1, v2]):
+            reply_api_url = absolutify(
+                reverse_ns('version-reviewnotes-list', args=[self.addon.id, version.pk])
+            )
+            review_form = doc('.dev-review-reply-form')[idx]
+            assert review_form.attrib['action'] == reply_api_url
+            assert (
+                review_form.attrib['data-session-id'] == self.client.session.session_key
+            )
+            assert (
+                review_form.attrib['data-history'] == '#%s-review-history' % version.pk
+            )
+            textarea = doc('.dev-review-reply-form textarea')[idx]
+            assert textarea.attrib['maxlength'] == '100000'
 
     def test_version_history_mixed_channels(self):
         v1 = self.version
@@ -656,8 +688,14 @@ class TestVersion(TestCase):
         )
 
     def test_pending_activity_count(self):
+        v1 = self.addon.current_version
+        v1.update(created=self.days_ago(1))
         v2, _ = self._extra_version_and_file(amo.STATUS_AWAITING_REVIEW)
+        v3, _ = self._extra_version_and_file(amo.STATUS_APPROVED)
         # Add some activity log messages
+        ActivityLog.objects.create(
+            amo.LOG.REVIEWER_REPLY_VERSION, v1.addon, v1, user=self.user
+        )
         ActivityLog.objects.create(
             amo.LOG.REVIEWER_REPLY_VERSION, v2.addon, v2, user=self.user
         )
@@ -665,17 +703,59 @@ class TestVersion(TestCase):
             amo.LOG.REVIEWER_REPLY_VERSION, v2.addon, v2, user=self.user
         )
 
-        response = self.client.get(self.url)
+        with self.assertNumQueries(37):
+            # 1. SAVEPOINT
+            # 2. the add-on
+            # 3. translations for that add-on (default transformer)
+            # 4. categories for that add-on (default transformer)
+            # 5. current version for that add-on (default transformer)
+            # 6. translations for the current version (default transformer)
+            # 7. applications versions for the current version (default transformer)
+            # 8. users for that add-on (default transformer)
+            # 9. previews for that add-on (default transformer)
+            # 10. current user
+            # 11. groups for that user
+            # 12. check on user being an author
+            # 13. count versions for the add-on for pagination
+            # 14. RELEASE SAVEPOINT
+            # 15. add-ons for that user
+            # 16. latest version in listed channel
+            # 17. translations for that version
+            # 18. latest version in unlisted channel
+            # 19. latest public version in listed channel
+            # 20. Translations for that version
+            # 21. check on user being an author (dupe)
+            # 22. site notice
+            # 23. suppressed email waffle switch check
+            # 24. 8 latest add-ons from that user for the menu
+            # 25. translations for those add-ons
+            # 26. count of pending activities on latest version
+            # 27. file validation for that latest version
+            # 28. is add-on promoted (for deletion warning)
+            # 29. versions being displayed w/ pending activities count and
+            #     file/validation/blockversion attached
+            # 30. latest non-disabled version
+            # 31. translations for that version
+            # 32. are there versions in unlisted channel
+            # 33. check on user being an owner
+            # 34. versions in unlisted channel
+            # 35. translations for those versions
+            # 36. latest non-disabled version in unlisted channel
+            # 37. check on user being an author (dupe)
+            response = self.client.get(self.url)
         assert response.status_code == 200
         doc = pq(response.content)
 
-        # Two versions, but three review-history-show because one reply link.
+        # Three versions...
         assert doc('.review-history-show').length == 3
-        # Two versions, but only one counter, for the latest/deleted version
+        # ...2 have pending activities
         pending_activity_count = doc('.review-history-pending-count')
-        assert pending_activity_count.length == 1
-        # There are two activity logs pending
-        assert pending_activity_count.text() == '2'
+        assert pending_activity_count.length == 2
+        # There are two activity logs pending on v2, one on v1.
+        pending_activity_count_for_v2 = pending_activity_count[0]
+        assert pending_activity_count_for_v2.text_content() == '2'
+        pending_activity_count_for_v1 = pending_activity_count[1]
+        assert pending_activity_count_for_v1.text_content() == '1'
 
     def test_channel_tag(self):
         self.addon.current_version.update(created=self.days_ago(1))
@@ -1124,7 +1204,7 @@ class TestVersionEditCompat(TestVersionEditBase):
         data.update(
             min=AppVersion.objects.get(
                 application=amo.FIREFOX.id,
-                version=amo.DEFAULT_WEBEXT_MIN_VERSION_NO_ID,
+                version=amo.DEFAULT_WEBEXT_MIN_VERSION,
             ).pk,
             max=AppVersion.objects.get(
                 application=amo.FIREFOX.id, version=amo.DEFAULT_WEBEXT_MAX_VERSION
@@ -1133,7 +1213,7 @@ class TestVersionEditCompat(TestVersionEditBase):
         response = self.client.post(self.url, self.formset(data, initial_count=1))
         assert response.status_code == 302
         av = self.version.apps.get()
-        assert av.min.version == amo.DEFAULT_WEBEXT_MIN_VERSION_NO_ID
+        assert av.min.version == amo.DEFAULT_WEBEXT_MIN_VERSION
         assert av.max.version == amo.DEFAULT_WEBEXT_MAX_VERSION
         assert list(
             ActivityLog.objects.exclude(action=amo.LOG.LOG_IN.id).values_list('action')
@@ -1235,7 +1315,7 @@ class TestVersionEditCompat(TestVersionEditBase):
         # Change Firefox compat
         data[0]['min'] = AppVersion.objects.get(
             application=amo.FIREFOX.id,
-            version=amo.DEFAULT_WEBEXT_MIN_VERSION_NO_ID,
+            version=amo.DEFAULT_WEBEXT_MIN_VERSION,
         ).pk
         data[0]['max'] = AppVersion.objects.get(
             application=amo.FIREFOX.id,
@@ -1246,7 +1326,7 @@ class TestVersionEditCompat(TestVersionEditBase):
         assert self.addon.current_version.apps.all().count() == 2
         avs.refresh_from_db()
         assert avs.application == amo.FIREFOX.id
-        assert avs.min.version == amo.DEFAULT_WEBEXT_MIN_VERSION_NO_ID
+        assert avs.min.version == amo.DEFAULT_WEBEXT_MIN_VERSION
         assert avs.max.version == amo.DEFAULT_WEBEXT_MAX_VERSION
         assert avs.originated_from == amo.APPVERSIONS_ORIGINATED_FROM_DEVELOPER
 

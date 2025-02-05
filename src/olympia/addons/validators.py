@@ -20,7 +20,7 @@ class VerifyMozillaTrademark:
         try:
             verify_mozilla_trademark(value, user)
         except forms.ValidationError as exc:
-            raise exceptions.ValidationError(exc.message)
+            raise exceptions.ValidationError(exc.message) from exc
 
 
 class VersionLicenseValidator:
@@ -159,7 +159,7 @@ class VersionAddonMetadataValidator(AddonMetadataValidator):
                     'version: {missing_addon_metadata}.'
                 ).format(missing_addon_metadata=list(exc.detail)),
                 code='required',
-            )
+            ) from exc
 
 
 class AddonDefaultLocaleValidator:
@@ -315,4 +315,19 @@ class CanSetCompatibilityValidator:
                         'This type of add-on does not allow custom compatibility.'
                     )
                 }
+            )
+
+
+class NoThemesValidator:
+    requires_context = True
+
+    def __call__(self, data, serializer):
+        addon = (
+            serializer.instance
+            if isinstance(serializer.instance, Addon)
+            else serializer.context['view'].get_addon_object()
+        )
+        if addon.type == amo.ADDON_STATICTHEME:
+            raise exceptions.ValidationError(
+                gettext('This endpoint is not valid for Themes.')
             )

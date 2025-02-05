@@ -4,12 +4,20 @@ from unittest import mock
 
 from django.conf import settings
 from django.core import mail
+from django.core.exceptions import ValidationError
+from django.db.transaction import atomic
+from django.db.utils import IntegrityError
 
 from olympia import amo, core
 from olympia.abuse.models import AbuseReport
 from olympia.access.models import Group, GroupUser
 from olympia.activity.models import ActivityLog
-from olympia.addons.models import AddonApprovalsCounter, AddonReviewerFlags, AddonUser
+from olympia.addons.models import (
+    Addon,
+    AddonApprovalsCounter,
+    AddonReviewerFlags,
+    AddonUser,
+)
 from olympia.amo.tests import (
     TestCase,
     addon_factory,
@@ -29,17 +37,20 @@ from olympia.files.models import File, FileValidation, WebextPermission
 from olympia.promoted.models import PromotedAddon
 from olympia.ratings.models import Rating
 from olympia.reviewers.models import (
+    VIEW_QUEUE_FLAGS,
     AutoApprovalNoValidationResultError,
     AutoApprovalSummary,
     NeedsHumanReview,
     ReviewActionReason,
     ReviewerSubscription,
+    UsageTier,
     get_flags,
     send_notifications,
     set_reviewing_cache,
 )
 from olympia.users.models import UserProfile
-from olympia.versions.models import Version, version_uploaded
+from olympia.versions.models import Version, VersionReviewerFlags, version_uploaded
+from olympia.zadmin.models import set_config
 
 
 class TestReviewerSubscription(TestCase):
@@ -1225,7 +1236,7 @@ class TestAutoApprovalSummary(TestCase):
         assert AutoApprovalSummary.check_should_be_delayed(self.version) is True
 
         # Update the creation date so it's old enough to be not delayed.
-        self.version.update(created=self.days_ago(2))
+        self.version.update(created=datetime.now() - timedelta(hours=24, seconds=1))
         assert AutoApprovalSummary.check_should_be_delayed(self.version) is False
 
         # Unlisted shouldn't be affected.
@@ -1236,6 +1247,34 @@ class TestAutoApprovalSummary(TestCase):
         assert (
             AutoApprovalSummary.check_has_auto_approval_disabled(self.version) is False
         )
+
+    def test_check_should_be_delayed_dynamic(self):
+        # The delay defaults to 24 hours (see test above) but can be configured
+        # by admins.
+        target_delay = 666
+        set_config('INITIAL_AUTO_APPROVAL_DELAY_FOR_LISTED', target_delay)
+        # Delete current_version, making self.version the first listed version
+        # submitted and add-on creation date recent.
+        self.addon.current_version.delete()
+        self.addon.update(created=datetime.now())
+        self.addon.update_status()
+        assert AutoApprovalSummary.check_should_be_delayed(self.version) is True
+
+        self.version.update(
+            created=datetime.now() - timedelta(seconds=target_delay - 1)
+        )
+        assert AutoApprovalSummary.check_should_be_delayed(self.version) is True
+        self.version.update(
+            created=datetime.now() - timedelta(seconds=target_delay + 1)
+        )
+        assert AutoApprovalSummary.check_should_be_delayed(self.version) is False
+
+        # Goes back to 24 hours if the value is invalid.
+        set_config('INITIAL_AUTO_APPROVAL_DELAY_FOR_LISTED', 'nonsense')
+        self.version.update(created=datetime.now() - timedelta(hours=23, seconds=1))
+        assert AutoApprovalSummary.check_should_be_delayed(self.version) is True
+        self.version.update(created=datetime.now() - timedelta(hours=24, seconds=1))
+        assert AutoApprovalSummary.check_should_be_delayed(self.version) is False
 
     def test_check_should_be_delayed_only_until_first_content_review(self):
         assert AutoApprovalSummary.check_should_be_delayed(self.version) is False
@@ -1310,6 +1349,22 @@ class TestAutoApprovalSummary(TestCase):
         # Langpacks are never considered locked.
         self.addon.update(type=amo.ADDON_LPAPP)
         assert AutoApprovalSummary.check_is_locked(self.version) is False
+
+    def test_check_is_pending_rejection(self):
+        assert AutoApprovalSummary.check_is_pending_rejection(self.version) is False
+
+        flags = VersionReviewerFlags.objects.create(version=self.version)
+        assert AutoApprovalSummary.check_is_pending_rejection(self.version) is False
+
+        flags.update(
+            pending_rejection=datetime.now() + timedelta(hours=1),
+            pending_rejection_by=user_factory(),
+            pending_content_rejection=False,
+        )
+        assert AutoApprovalSummary.check_is_pending_rejection(self.version) is True
+
+        flags.update(pending_content_rejection=True)
+        assert AutoApprovalSummary.check_is_pending_rejection(self.version) is True
 
     @mock.patch.object(AutoApprovalSummary, 'calculate_weight', spec=True)
     @mock.patch.object(AutoApprovalSummary, 'calculate_verdict', spec=True)
@@ -1412,6 +1467,7 @@ class TestAutoApprovalSummary(TestCase):
             'is_promoted_prereview': False,
             'should_be_delayed': False,
             'is_blocked': False,
+            'is_pending_rejection': False,
         }
 
     def test_calculate_verdict_failure_dry_run(self):
@@ -1425,6 +1481,7 @@ class TestAutoApprovalSummary(TestCase):
             'is_promoted_prereview': False,
             'should_be_delayed': False,
             'is_blocked': False,
+            'is_pending_rejection': False,
         }
         assert summary.verdict == amo.WOULD_NOT_HAVE_BEEN_AUTO_APPROVED
 
@@ -1439,6 +1496,7 @@ class TestAutoApprovalSummary(TestCase):
             'is_promoted_prereview': False,
             'should_be_delayed': False,
             'is_blocked': False,
+            'is_pending_rejection': False,
         }
         assert summary.verdict == amo.NOT_AUTO_APPROVED
 
@@ -1451,6 +1509,7 @@ class TestAutoApprovalSummary(TestCase):
             'is_promoted_prereview': False,
             'should_be_delayed': False,
             'is_blocked': False,
+            'is_pending_rejection': False,
         }
         assert summary.verdict == amo.AUTO_APPROVED
 
@@ -1463,6 +1522,7 @@ class TestAutoApprovalSummary(TestCase):
             'is_promoted_prereview': False,
             'should_be_delayed': False,
             'is_blocked': False,
+            'is_pending_rejection': False,
         }
         assert summary.verdict == amo.WOULD_HAVE_BEEN_AUTO_APPROVED
 
@@ -1477,6 +1537,7 @@ class TestAutoApprovalSummary(TestCase):
             'is_promoted_prereview': False,
             'should_be_delayed': False,
             'is_blocked': False,
+            'is_pending_rejection': False,
         }
         assert summary.verdict == amo.NOT_AUTO_APPROVED
 
@@ -1491,6 +1552,7 @@ class TestAutoApprovalSummary(TestCase):
             'is_promoted_prereview': True,
             'should_be_delayed': False,
             'is_blocked': False,
+            'is_pending_rejection': False,
         }
         assert summary.verdict == amo.NOT_AUTO_APPROVED
 
@@ -1505,6 +1567,7 @@ class TestAutoApprovalSummary(TestCase):
             'is_promoted_prereview': False,
             'should_be_delayed': False,
             'is_blocked': True,
+            'is_pending_rejection': False,
         }
         assert summary.verdict == amo.NOT_AUTO_APPROVED
 
@@ -1519,6 +1582,7 @@ class TestAutoApprovalSummary(TestCase):
             'is_promoted_prereview': False,
             'should_be_delayed': True,
             'is_blocked': False,
+            'is_pending_rejection': False,
         }
         assert summary.verdict == amo.NOT_AUTO_APPROVED
 
@@ -1529,12 +1593,14 @@ class TestAutoApprovalSummary(TestCase):
             'is_promoted_prereview': True,
             'should_be_delayed': True,
             'is_blocked': True,
+            'is_pending_rejection': True,
         }
         result = list(AutoApprovalSummary.verdict_info_prettifier(verdict_info))
         assert result == [
             'Has auto-approval disabled/delayed flag set',
             'Version string and guid match a blocklist Block',
             'Is locked by a reviewer',
+            'Is pending rejection',
             'Is in a promoted add-on group that requires pre-review',
             "Delayed because it's the first listed version",
         ]
@@ -1542,21 +1608,64 @@ class TestAutoApprovalSummary(TestCase):
         result = list(AutoApprovalSummary.verdict_info_prettifier({}))
         assert result == []
 
+    def test_verdict_display(self):
+        assert (
+            AutoApprovalSummary(verdict=amo.AUTO_APPROVED).get_verdict_display()
+            == 'Was auto-approved'
+        )
+        assert (
+            AutoApprovalSummary(verdict=amo.NOT_AUTO_APPROVED).get_verdict_display()
+            == 'Was *not* auto-approved'
+        )
+        assert (
+            AutoApprovalSummary(
+                verdict=amo.WOULD_HAVE_BEEN_AUTO_APPROVED
+            ).get_verdict_display()
+            == 'Would have been auto-approved (dry-run mode was in effect)'
+        )
+        assert (
+            AutoApprovalSummary(
+                verdict=amo.WOULD_NOT_HAVE_BEEN_AUTO_APPROVED
+            ).get_verdict_display()
+            == 'Would *not* have been auto-approved (dry-run mode was in effect)'
+        )
+
 
 class TestReviewActionReason(TestCase):
     def test_basic(self):
-        canned_response = 'Some canned response text.'
-        name = 'Test reason'
         reason = ReviewActionReason.objects.create(
-            canned_response=canned_response,
+            canned_response='Some canned response text.',
             is_active=False,
-            name=name,
+            name='Test reason',
         )
 
-        assert reason.canned_response == canned_response
-        assert reason.name == name
-        assert reason.__str__() == name
+        assert reason.__str__() == reason.name
         assert not reason.is_active
+        assert reason.labelled_name() == f'(** inactive **) {reason.name}'
+
+        reason.update(is_active=True)
+        assert reason.labelled_name() == reason.name
+
+    def test_constraint(self):
+        reason = ReviewActionReason(name='foo')
+
+        with self.assertRaises(ValidationError):
+            reason.full_clean()
+        with atomic():
+            with self.assertRaises(IntegrityError):
+                reason.save()
+
+        reason.canned_response = 'something'
+        reason.full_clean()
+        reason.save()
+
+        reason.canned_block_reason = 'something else'
+        reason.full_clean()
+        reason.save()
+
+        reason.canned_response = ''
+        reason.full_clean()
+        reason.save()
 
 
 class TestGetFlags(TestCase):
@@ -1680,25 +1789,43 @@ class TestGetFlags(TestCase):
     def test_version_none(self):
         assert get_flags(self.addon, None) == []
 
-    def test_needs_human_review_abuse_flag(self):
-        assert get_flags(self.addon, self.addon.current_version) == []
-        self.addon.needs_human_review_from_abuse = False
-        self.addon.needs_human_review_from_cinder = False
-        self.addon.needs_human_review_from_appeal = False
-        assert get_flags(self.addon, self.addon.current_version) == []
-        for attribute, title in (
-            ('cinder', 'Abuse report forwarded from Cinder present'),
-            ('abuse', 'Abuse report present'),
-            ('appeal', 'Appeal on decision present'),
-        ):
+    def test_due_date_reason_flags(self):
+        def reset_all_flags_to_false():
             self.addon.needs_human_review_from_abuse = False
             self.addon.needs_human_review_from_cinder = False
             self.addon.needs_human_review_from_appeal = False
-            attribute = 'needs_human_review_from_' + attribute
+            self.addon.is_from_theme_awaiting_review = False
+            self.addon.needs_human_review_promoted = False
+            self.addon.needs_human_review_auto_approval_disabled = False
+            self.addon.needs_human_review_other = False
+            self.addon.has_developer_reply = False
+
+        assert get_flags(self.addon, self.addon.current_version) == []
+        reset_all_flags_to_false()
+        assert get_flags(self.addon, self.addon.current_version) == []
+        for attribute, title in (
+            (
+                'needs_human_review_from_cinder',
+                'Abuse report forwarded from Cinder',
+            ),
+            ('needs_human_review_from_abuse', 'Abuse report'),
+            ('needs_human_review_from_appeal', 'Appeal on decision'),
+            ('is_from_theme_awaiting_review', 'Theme version'),
+            ('needs_human_review_promoted', 'Promoted add-on'),
+            ('needs_human_review_auto_approval_disabled', 'Auto-approval disabled'),
+            ('needs_human_review_other', 'Other NeedsHumanReview flag'),
+            ('has_developer_reply', 'Outstanding developer reply'),
+        ):
+            reset_all_flags_to_false()
             setattr(self.addon, attribute, True)
             assert get_flags(self.addon, self.addon.current_version) == [
                 (attribute.replace('_', '-'), title)
             ]
+
+    def test_all_due_due_reasons_exposed_as_flags(self):
+        assert set(Version.objects.get_due_date_reason_q_objects().keys()).issubset(
+            {flag for flag, _ in VIEW_QUEUE_FLAGS}
+        )
 
 
 class TestNeedsHumanReview(TestCase):
@@ -1741,3 +1868,89 @@ class TestNeedsHumanReview(TestCase):
         flagged.reason = NeedsHumanReview.REASONS.DEVELOPER_REPLY
         flagged.save()
         assert ActivityLog.objects.count() == 0
+
+
+class UsageTierTests(TestCase):
+    def setUp(self):
+        self.tier = UsageTier.objects.create(
+            lower_adu_threshold=100,
+            upper_adu_threshold=1000,
+            growth_threshold_before_flagging=50,
+        )
+
+    def test_get_base_addons(self):
+        addon_factory(status=amo.STATUS_DISABLED)
+        addon_factory(type=amo.ADDON_STATICTHEME)
+        expected = {addon_factory()}
+        assert set(self.tier.get_base_addons()) == expected
+
+    def test_get_tier_boundaries(self):
+        assert self.tier.get_tier_boundaries() == {
+            'average_daily_users__gte': 100,
+            'average_daily_users__lt': 1000,
+        }
+
+    def test_average_growth(self):
+        addon_factory(hotness=0.5, average_daily_users=1000)  # Different tier
+        addon_factory(
+            hotness=0.5, average_daily_users=999, status=amo.STATUS_DISABLED
+        )  # Right tier but disabled
+        addon_factory(
+            hotness=0.5, average_daily_users=999, type=amo.ADDON_STATICTHEME
+        )  # Right tier but not an extension
+        addon_factory(hotness=0.1, average_daily_users=100)
+        addon_factory(hotness=0.2, average_daily_users=999)
+        assert round(self.tier.average_growth, ndigits=2) == 0.15
+
+        # Value is cached on the instance
+        addon_factory(hotness=0.3, average_daily_users=500)
+        assert round(self.tier.average_growth, ndigits=2) == 0.15
+        del self.tier.average_growth
+        assert round(self.tier.average_growth, ndigits=2) == 0.2
+
+    def test_get_growth_threshold(self):
+        assert round(self.tier.get_growth_threshold(), ndigits=2) == 0.5
+        addon_factory(hotness=0.01, average_daily_users=100)
+        addon_factory(hotness=0.01, average_daily_users=999)
+        del self.tier.average_growth
+        assert round(self.tier.get_growth_threshold(), ndigits=2) == 0.51
+
+        addon_factory(hotness=0.78, average_daily_users=999)
+        del self.tier.average_growth
+        assert round(self.tier.get_growth_threshold(), ndigits=2) == 0.77
+
+    def test_get_growth_threshold_zero_floor_instead_of_negative(self):
+        addon_factory(hotness=-0.4, average_daily_users=100)
+        addon_factory(hotness=-0.4, average_daily_users=999)
+        assert round(self.tier.get_growth_threshold(), ndigits=2) == 0.1
+
+        addon_factory(hotness=-0.9, average_daily_users=999)
+        addon_factory(hotness=-0.9, average_daily_users=999)
+        del self.tier.average_growth
+        assert round(self.tier.get_growth_threshold(), ndigits=2) == 0  # Not -0.15
+
+    def test_get_growth_threshold_q_object(self):
+        addon_factory(hotness=0.01, average_daily_users=100)
+        addon_factory(hotness=0.01, average_daily_users=999)
+        expected = [addon_factory(hotness=0.78, average_daily_users=999)]
+
+        assert (
+            list(Addon.objects.filter(self.tier.get_growth_threshold_q_object()))
+            == expected
+        )
+
+    def test_get_growth_threshold_q_object_hotness_needs_to_be_higher_than(self):
+        addon_factory(hotness=0.5, average_daily_users=999)
+        expected = [addon_factory(hotness=0.501, average_daily_users=999)]
+
+        # Override computed average growth to force the growth threshold to
+        # 0.5 (0.0 + 50/100)
+        self.tier.average_growth = 0.0
+        assert self.tier.get_growth_threshold() == 0.5
+
+        # We filter on hotness_gt in get_growth_threshold_q_object() so the
+        # first add-on shouldn't be returned, only the second one.
+        assert (
+            list(Addon.objects.filter(self.tier.get_growth_threshold_q_object()))
+            == expected
+        )
