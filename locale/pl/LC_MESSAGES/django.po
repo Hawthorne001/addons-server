@@ -5474,7 +5474,7 @@ msgstr ""
 #. editorial content for the primary hero shelves.
 #: src/olympia/discovery/strings.jinja2:530 src/olympia/discovery/strings.jinja2:720
 msgid "Turn the web dark or select a custom color scheme to visually tailor the internet to your own taste."
-msgstr ""
+msgstr "Przyciemnij internet lub wybierz niestandardowy motyw, aby dopasować wygląd Internetu do własnych upodobań."
 
 #. editorial content for the discovery pane.
 #. editorial content for the primary hero shelves.
