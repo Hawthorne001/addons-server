@@ -1,4 +1,4 @@
-name: Test Docker Image (test_main only)
+name: Test Docker Image
 
 run-name: |
   ref: ${{ github.ref_name }} |
@@ -44,10 +44,6 @@ concurrency:
   group: test_main-${{ github.workflow }}-${{ github.event_name}}-${{ github.ref}}-${{ toJson(inputs) }}
   cancel-in-progress: true
 
-env:
-  log_artifact: test_main_logs
-  log_file: report.json
-
 jobs:
   test_config:
     runs-on: ubuntu-latest
@@ -81,6 +77,23 @@ jobs:
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
 
+  test_codestyle:
+    runs-on: ubuntu-latest
+    needs: [test_config]
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Test
+        uses: ./.github/actions/run-docker-minimal
+        with:
+          digest: ${{ inputs.digest }}
+          version: ${{ inputs.version }}
+          run: |
+            make lint-codestyle
+
   test_main:
     runs-on: ubuntu-latest
     needs: [test_config]
@@ -94,52 +107,84 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Create empty environment
+        run: |
+          touch .env
+
+      - name: Spin up autograph
+        run: |
+          docker compose up --wait autograph
+
+      - name: Spin up redis
+        run: |
+          docker compose up --wait redis
+
       - name: Test (test_matrix)
-        uses: ./.github/actions/run-docker
+        uses: ./.github/actions/run-docker-minimal
         with:
           digest: ${{ inputs.digest }}
           version: ${{ inputs.version }}
-          deps: development
           run: |
             split="--splits ${{ needs.test_config.outputs.splits }}"
             group="--group ${{ matrix.group }}"
-            report="--report-log ${{ env.log_file}}"
-            make test_main ARGS="${split} ${group} ${report}"
+            make test_main ARGS="${split} ${group}"
 
-      - name: Upload logs
-        uses: actions/upload-artifact@v5
-        with:
-          path: ${{ env.log_file }}
-          name: ${{ env.log_artifact }}-${{ matrix.group }}
-          retention-days: 1
-          overwrite: true
-
-  test_log:
+  test_internal_routes:
     runs-on: ubuntu-latest
-    if: always()
-    needs: [test_config, test_main]
+    needs: [test_config]
 
     steps:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
-      - uses: actions/download-artifact@v6
+      - name: Test
+        uses: ./.github/actions/run-docker-minimal
         with:
-          pattern: ${{ env.log_artifact }}*
+          digest: ${{ inputs.digest }}
+          version: ${{ inputs.version }}
+          run: |
+            make test_internal_routes_allowed
 
-      - name: Cat logs
-        shell: bash
+  test_needs_locales:
+    runs-on: ubuntu-latest
+    needs: [test_config]
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Test
+        uses: ./.github/actions/run-docker-minimal
+        with:
+          digest: ${{ inputs.digest }}
+          version: ${{ inputs.version }}
+          run: |
+            make compile_locales
+            make test_needs_locales_compilation
+
+  test_search:
+    runs-on: ubuntu-latest
+    needs: [test_config]
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Create empty environment
         run: |
-          for dir in $(find . -maxdepth 1 -name "${{ env.log_artifact }}*" -type d | sort -V); do
-            job=$(basename "$dir")
-            file="${dir}/${{ env.log_file }}"
-            if [ -f "$file" ]; then
-              jq \
-                -r \
-                --arg job "$job" \
-                'select(has("when") and .when == "teardown") | "[\($job)] \(.outcome) \(.nodeid)"' < "$file"
-            else
-              echo "$file: No such file or directory"
-            fi
-          done
+          touch .env
+
+      - name: Spin up Elasticsearch
+        run: |
+          docker compose up --wait elasticsearch
+
+      - name: Test
+        uses: ./.github/actions/run-docker-minimal
+        with:
+          digest: ${{ inputs.digest }}
+          version: ${{ inputs.version }}
+          run: |
+            make test_es_tests
