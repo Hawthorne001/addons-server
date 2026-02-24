@@ -1889,7 +1889,7 @@ msgstr "La catégorie divers ne peut pas être combinée avec d’autres."
 
 #: src/olympia/devhub/forms.py:246 src/olympia/devhub/forms.py:1360
 msgid "There was an error uploading your image."
-msgstr ""
+msgstr "Une erreur est survenue pendant l’envoi de votre image."
 
 #: src/olympia/devhub/forms.py:300
 #, python-format
@@ -6089,7 +6089,7 @@ msgstr "Gestionnaires d’onglets"
 #. editorial content for the secondary hero shelves.
 #: src/olympia/discovery/strings.jinja2:1108
 msgid "Anti-tracking extensions"
-msgstr ""
+msgstr "Extensions contre le pistage"
 
 #. editorial content for the secondary hero shelves.
 #: src/olympia/discovery/strings.jinja2:1110 src/olympia/discovery/strings.jinja2:1112 src/olympia/discovery/strings.jinja2:1114
