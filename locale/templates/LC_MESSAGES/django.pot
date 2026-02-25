@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: addons-server 1.0\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-02-24 10:04+0000\n"
+"POT-Creation-Date: 2026-02-25 10:47+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -603,7 +603,7 @@ msgstr ""
 msgid "CIDR"
 msgstr ""
 
-#: src/olympia/amo/middleware.py:258
+#: src/olympia/amo/middleware.py:255
 #: src/olympia/devhub/templates/devhub/index.html:56
 #: src/olympia/templates/base.html:64
 msgid ""
@@ -781,43 +781,43 @@ msgstr ""
 msgid "Another Body"
 msgstr ""
 
-#: src/olympia/api/authentication.py:64 src/olympia/api/authentication.py:247
+#: src/olympia/api/authentication.py:65 src/olympia/api/authentication.py:252
 msgid "Invalid Authorization header. No credentials provided."
 msgstr ""
 
-#: src/olympia/api/authentication.py:72 src/olympia/api/authentication.py:251
+#: src/olympia/api/authentication.py:73 src/olympia/api/authentication.py:256
 msgid "Invalid Authorization header. Credentials string should not contain spaces."
 msgstr ""
 
-#: src/olympia/api/authentication.py:108
+#: src/olympia/api/authentication.py:109
 msgid "Valid user session not found matching the provided session key."
 msgstr ""
 
-#: src/olympia/api/authentication.py:122
+#: src/olympia/api/authentication.py:123
 msgid "Access token refresh failed; user needs to login to FxA again."
 msgstr ""
 
-#: src/olympia/api/authentication.py:187
+#: src/olympia/api/authentication.py:192
 msgid "Wrong type for one or more keys in payload"
 msgstr ""
 
-#: src/olympia/api/authentication.py:190
+#: src/olympia/api/authentication.py:195
 msgid "Signature has expired."
 msgstr ""
 
-#: src/olympia/api/authentication.py:193
+#: src/olympia/api/authentication.py:198
 msgid "Error decoding signature."
 msgstr ""
 
-#: src/olympia/api/authentication.py:196
+#: src/olympia/api/authentication.py:201
 msgid "Invalid JWT Token."
 msgstr ""
 
-#: src/olympia/api/authentication.py:286
+#: src/olympia/api/authentication.py:291
 msgid "Invalid token or hash."
 msgstr ""
 
-#: src/olympia/api/authentication.py:289
+#: src/olympia/api/authentication.py:294
 msgid "Email address not found."
 msgstr ""
 
