@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: addons-server 1.0\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-02-25 16:53+0000\n"
+"POT-Creation-Date: 2026-02-27 13:39+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1353,40 +1353,40 @@ msgstr ""
 msgid "{addon} {0} property edited."
 msgstr ""
 
-#: src/olympia/constants/activity.py:1255
+#: src/olympia/constants/activity.py:1256
 #, python-brace-format
 msgid "Collection {0} property {1} updated."
 msgstr ""
 
-#: src/olympia/constants/activity.py:1262
+#: src/olympia/constants/activity.py:1263
 #, python-brace-format
 msgid "Account {user} property {0} updated."
 msgstr ""
 
-#: src/olympia/constants/activity.py:1279
+#: src/olympia/constants/activity.py:1280
 #, python-brace-format
 msgid "{addon} listing content approved."
 msgstr ""
 
-#: src/olympia/constants/activity.py:1281
+#: src/olympia/constants/activity.py:1282
 msgid "Rejected listing approved"
 msgstr ""
 
-#: src/olympia/constants/activity.py:1293
+#: src/olympia/constants/activity.py:1294
 #, python-brace-format
 msgid "{addon} listing content rejected."
 msgstr ""
 
-#: src/olympia/constants/activity.py:1294
+#: src/olympia/constants/activity.py:1295
 msgid "Listing rejected"
 msgstr ""
 
-#: src/olympia/constants/activity.py:1316
+#: src/olympia/constants/activity.py:1317
 #, python-brace-format
 msgid "{addon} listing content review requested."
 msgstr ""
 
-#: src/olympia/constants/activity.py:1317
+#: src/olympia/constants/activity.py:1318
 msgid "Listing review requested"
 msgstr ""
 
