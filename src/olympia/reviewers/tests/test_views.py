@@ -5380,6 +5380,155 @@ class TestReview(ReviewBase):
             assert li.text == f'{i}.0'
         assert lis[MAX_MOCK].text == '...'
 
+    def test_important_changes_log_content_review_metadata_changes(self):
+        self.url = reverse('reviewers.review', args=['content', self.addon.pk])
+        core.set_user(self.addon.authors.get())
+        ActivityLog.objects.create(
+            amo.LOG.EDIT_ADDON_PROPERTY,
+            self.addon,
+            'summary',
+            json.dumps({'removed': ['Old string'], 'added': ['New string']}),
+        )
+        ActivityLog.objects.create(
+            amo.LOG.EDIT_ADDON_PROPERTY,
+            self.addon,
+            'name',
+            json.dumps({'removed': [], 'added': ['NewNew string']}),
+        )
+        ActivityLog.objects.create(
+            amo.LOG.EDIT_ADDON_PROPERTY,
+            self.addon,
+            'name',
+            json.dumps({'added': [], 'removed': ['OldOld string']}),
+        )
+        response = self.client.get(self.url)
+        assert response.status_code == 200
+        doc = pq(response.content)
+        important_changes = doc('#important-changes-history table.activity tr')
+        assert len(important_changes) == 3
+        row = doc('#important-changes-history .activity tr:nth-child(1)')
+        assert row
+        changes_html = row.find('.history-comment .property-changes').html().strip()
+        assert changes_html == (
+            '<span class="removed">Old string</span> '
+            '➡️ <span class="added">New string</span>'
+        )
+        row = doc('#important-changes-history .activity tr:nth-child(2)')
+        assert row
+        changes_html = row.find('.history-comment .property-changes').html().strip()
+        assert changes_html == (
+            '<span class="empty">∅</span> ➡️ <span class="added">NewNew string</span>'
+        )
+        row = doc('#important-changes-history .activity tr:nth-child(3)')
+        assert row
+        changes_html = row.find('.history-comment .property-changes').html().strip()
+        assert changes_html == (
+            '<span class="removed">OldOld string</span> ➡️ <span class="empty">∅</span>'
+        )
+
+    def test_important_changes_log_content_review_metadata_changes_xss(self):
+        self.url = reverse('reviewers.review', args=['content', self.addon.pk])
+        core.set_user(self.addon.authors.get())
+        ActivityLog.objects.create(
+            amo.LOG.EDIT_ADDON_PROPERTY,
+            self.addon,
+            'summary',
+            json.dumps(
+                {
+                    'removed': ['<script>alert(4)</script>'],
+                    'added': ['<script>alert(2)</script>'],
+                }
+            ),
+        )
+        response = self.client.get(self.url)
+        assert response.status_code == 200
+        doc = pq(response.content)
+        important_changes = doc('#important-changes-history table.activity tr')
+        assert len(important_changes) == 1
+        row = doc('#important-changes-history .activity tr:nth-child(1)')
+        assert row
+        changes_html = row.find('.history-comment .property-changes').html().strip()
+        assert changes_html == (
+            '<span class="removed">&lt;script&gt;alert(4)&lt;/script&gt;</span> '
+            '➡️ <span class="added">&lt;script&gt;alert(2)&lt;/script&gt;</span>'
+        )
+        assert '<script>alert' not in response.content.decode('utf-8')
+
+    def test_important_changes_log_content_review_metadata_changes_missing_data(self):
+        self.url = reverse('reviewers.review', args=['content', self.addon.pk])
+        core.set_user(self.addon.authors.get())
+        ActivityLog.objects.create(
+            amo.LOG.EDIT_ADDON_PROPERTY,
+            self.addon,
+            'summary',
+            json.dumps({'removed': ['Old string'], 'added': ['New string']}),
+        )
+        ActivityLog.objects.create(
+            amo.LOG.EDIT_ADDON_PROPERTY,
+            self.addon,
+            'name',
+            json.dumps({'added': ['NewNew string']}),
+        )
+        ActivityLog.objects.create(
+            amo.LOG.EDIT_ADDON_PROPERTY,
+            self.addon,
+            'name',
+            json.dumps({'removed': ['OldOld string']}),
+        )
+        response = self.client.get(self.url)
+        assert response.status_code == 200
+        doc = pq(response.content)
+        important_changes = doc('#important-changes-history table.activity tr')
+        assert len(important_changes) == 3
+        row = doc('#important-changes-history .activity tr:nth-child(1)')
+        assert row
+        changes_html = row.find('.history-comment .property-changes').html().strip()
+        assert changes_html == (
+            '<span class="removed">Old string</span> '
+            '➡️ <span class="added">New string</span>'
+        )
+        row = doc('#important-changes-history .activity tr:nth-child(2)')
+        assert row
+        changes_html = row.find('.history-comment .property-changes').html().strip()
+        assert changes_html == (
+            '<span class="empty">∅</span> ➡️ <span class="added">NewNew string</span>'
+        )
+        row = doc('#important-changes-history .activity tr:nth-child(3)')
+        assert row
+        changes_html = row.find('.history-comment .property-changes').html().strip()
+        assert changes_html == (
+            '<span class="removed">OldOld string</span> ➡️ <span class="empty">∅</span>'
+        )
+
+    def test_important_changes_log_content_review_metadata_changes_data_multiple(self):
+        self.url = reverse('reviewers.review', args=['content', self.addon.pk])
+        core.set_user(self.addon.authors.get())
+        ActivityLog.objects.create(
+            amo.LOG.EDIT_ADDON_PROPERTY,
+            self.addon,
+            'summary',
+            json.dumps(
+                {
+                    'removed': ['Old string', 'OldOld string'],
+                    'added': ['New string', 'NewNew string'],
+                }
+            ),
+        )
+        response = self.client.get(self.url)
+        assert response.status_code == 200
+        doc = pq(response.content)
+        important_changes = doc('#important-changes-history table.activity tr')
+        assert len(important_changes) == 1
+        row = doc('#important-changes-history .activity tr:nth-child(1)')
+        assert row
+        changes_html = row.find('.history-comment .property-changes').html().strip()
+        assert changes_html == (
+            '<span class="removed">Old string</span> '
+            '<span class="removed">OldOld string</span> '
+            '➡️ <span class="added">New string</span> '
+            '<span class="added">NewNew string</span>'
+        )
+
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     @mock.patch('olympia.devhub.tasks.validate')
     def test_validation_not_run_eagerly(self, validate):
