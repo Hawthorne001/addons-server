@@ -1316,11 +1316,11 @@ msgstr "Contenido de publicación rechazado"
 #: src/olympia/constants/activity.py:1316
 #, python-brace-format
 msgid "{addon} listing content review requested."
-msgstr ""
+msgstr "Se solicitó revisión del contenido de publicación de {addon}."
 
 #: src/olympia/constants/activity.py:1317
 msgid "Listing review requested"
-msgstr ""
+msgstr "Se solicitó revisión de la publicación"
 
 #: src/olympia/constants/applications.py:28 src/olympia/constants/categories.py:244
 msgid "Firefox"
@@ -1865,7 +1865,7 @@ msgstr "La categoría miscelánea no puede combinarse con categorías adicionale
 
 #: src/olympia/devhub/forms.py:246 src/olympia/devhub/forms.py:1360
 msgid "There was an error uploading your image."
-msgstr ""
+msgstr "Ha ocurrido un error al subir tu imagen."
 
 #: src/olympia/devhub/forms.py:300
 #, python-format
