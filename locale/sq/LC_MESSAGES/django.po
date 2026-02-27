@@ -2852,12 +2852,16 @@ msgid ""
 "A longer explanation of features, functionality, and other relevant information. This field is only displayed on the add-on's product page. Minimum length: %(min_length)s characters; Recommended "
 "length: 250 characters. If you need a longer description, make sure the first 250 characters contain the most important description points."
 msgstr ""
+"Një shpjegim më i gjatë i veçorive, funksionit dhe informacioni tjetër me vlerë. Kjo fushë shfaqet vetëm në faqen e produktit për shtesën. Gjatësi minimum: %(min_length)s shenja. Gjatësi e "
+"rekomanduar: 250 shenja; Nëse ju duhet një përshkrim më i gjatë, sigurohuni se 250 shenjat e para përmbajnë pikat më të rëndësishme të përshkrimit."
 
 #: src/olympia/devhub/templates/devhub/addons/edit/describe.html:140
 msgid ""
 "A longer explanation of features, functionality, and other relevant information. This field is only displayed on the add-on's product page. Recommended length: 250 characters. If you need a longer "
 "description, make sure the first 250 characters contain the most important description points."
 msgstr ""
+"Një shpjegim më i gjatë i veçorive, funksionit dhe informacioni tjetër me vlerë. Kjo fushë shfaqet vetëm në faqen e produktit për shtesën. Gjatësi e rekomanduar: 250 shenja. Nëse ju duhet një "
+"përshkrim më i gjatë, sigurohuni se 250 shenjat e para përmbajnë pikat më të rëndësishme të përshkrimit."
 
 #: src/olympia/devhub/templates/devhub/addons/edit/describe.html:169
 msgid "Experimental?"
@@ -3076,7 +3080,7 @@ msgstr "Shtesa juaj aktualisht është caktuar si “E padukshme”."
 
 #: src/olympia/devhub/templates/devhub/addons/includes/cant_submit_new_listed_versions_warning.html:5
 msgid "Your add-on listing was rejected."
-msgstr ""
+msgstr "Paraqitja e shtesës tuaj u hodh poshtë."
 
 #: src/olympia/devhub/templates/devhub/addons/includes/cant_submit_new_listed_versions_warning.html:7
 msgid "While in this state, \"On your own\" is the only distribution method available."
@@ -3592,7 +3596,7 @@ msgstr "Krijoni një Version Teme"
 
 #: src/olympia/devhub/templates/devhub/addons/submit/upload.html:82
 msgid "You can upload a finished theme using the upload option above, or you can build it yourself using this tool."
-msgstr ""
+msgstr "Mundeni të ngarkoni një temë të përfunduar duke përdorur mundësinë e ngarkimit më sipër, ose mund ta ndërtoni ju vetë duke përdorur këtë mjet."
 
 #: src/olympia/devhub/templates/devhub/addons/submit/upload.html:88
 msgid "Create a Theme"
@@ -3821,7 +3825,7 @@ msgstr "Shtesa juaj qe çaktivizuar nga një përgjegjës sajti dhe s’shfaqet 
 
 #: src/olympia/devhub/templates/devhub/includes/addon_details.html:32
 msgid "Your add-on listing was rejected. It is not listed in our gallery. Please address the reasons and reapply for review."
-msgstr ""
+msgstr "Paraqitja e shtesë suaj u hodh poshtë. Nuk shfaqet në galerinë tonë. Ju lutemi, trajtoni arsyet dhe riaplikoni për shqyrtim."
 
 #: src/olympia/devhub/templates/devhub/includes/addon_details.html:35
 msgid "Your add-on won't be included in search results, and its listing page will indicate you disabled it. New version submissions for listing won't be accepted in this state."
