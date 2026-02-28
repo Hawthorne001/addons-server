@@ -4000,15 +4000,15 @@ msgstr "{label_open}უხილავი:{label_close} არ გამოჩ�
 
 #: src/olympia/devhub/templates/devhub/includes/listing_visibility.html:39
 msgid "Our review found that your listing content violates the following Mozilla policy or policies:"
-msgstr ""
+msgstr "ჩვენ მიერ გადახედვის შედეგად აღმოჩნდა, რომ თქვენი გამოქვეყნებული მასალა არღვევს Mozilla-ს შემდეგ დებულებებს:"
 
 #: src/olympia/devhub/templates/devhub/includes/listing_visibility.html:50
 msgid "To address these issues, please update your listing and request another review of the content."
-msgstr ""
+msgstr "ამ საკითხების მოსაგვარებლად, გთხოვთ განაახლოთ გამოქვეყნებული მასალა და მოითხოვოთ მისი ხელახლა გადახედვა."
 
 #: src/olympia/devhub/templates/devhub/includes/listing_visibility.html:54
 msgid "Review requested already, awaiting review"
-msgstr ""
+msgstr "განხილვა უკვე მოთხოვნილია, მოლოდინის რეჟიმშია"
 
 #: src/olympia/devhub/templates/devhub/includes/listing_visibility.html:59
 msgid "I confirm I have addressed the issues, and request a review"
