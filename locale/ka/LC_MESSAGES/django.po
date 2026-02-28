@@ -2188,7 +2188,7 @@ msgstr "URL სახელი არასწორია. დამატე�
 
 #: src/olympia/devhub/views.py:436
 msgid "Request for a new review of listing content acknowledged."
-msgstr ""
+msgstr "გამოქვეყნებული მასალის ხელახლა გადახედვის მოთხოვნა დადასტურებულია."
 
 #: src/olympia/devhub/views.py:480
 msgid "Invitation accepted."
@@ -2765,7 +2765,7 @@ msgstr "თუ გსურთ, მომხმარებლებისგა
 #: src/olympia/devhub/templates/devhub/addons/edit/additional_details.html:45
 #, python-format
 msgid "Supported domains: %(supported_domains)s"
-msgstr ""
+msgstr "მხარდაჭერილი სამისამართო ჯგუფები: %(supported_domains)s"
 
 #: src/olympia/devhub/templates/devhub/addons/edit/additional_details.html:55 src/olympia/translations/templates/translations/trans-menu.html:13
 msgid "Default Locale"
@@ -2859,12 +2859,16 @@ msgid ""
 "A longer explanation of features, functionality, and other relevant information. This field is only displayed on the add-on's product page. Minimum length: %(min_length)s characters; Recommended "
 "length: 250 characters. If you need a longer description, make sure the first 250 characters contain the most important description points."
 msgstr ""
+"ვრცელი განმარტება შესაძლებლობების, დანიშნულებისა და სხვა საჭირო მონაცემებისა. ეს ველი ჩანს მხოლოდ დამატებების პროდუქტის გვერდზე. სიგრძე არანაკლებ: %(min_length)s სიმბოლო; სასურველი სიგრძე: 250 "
+"სიმბოლო. თუ გესაჭიროებათ მეტად ვრცელი აღწერა, დარწმუნდით, რომ პირველ 250 სიმბოლოში მოექცევა მნიშვნელოვანი საკითხები."
 
 #: src/olympia/devhub/templates/devhub/addons/edit/describe.html:140
 msgid ""
 "A longer explanation of features, functionality, and other relevant information. This field is only displayed on the add-on's product page. Recommended length: 250 characters. If you need a longer "
 "description, make sure the first 250 characters contain the most important description points."
 msgstr ""
+"ვრცელი განმარტება შესაძლებლობების, დანიშნულებისა და სხვა საჭირო მონაცემებისა. ეს ველი ჩანს მხოლოდ დამატებების პროდუქტის გვერდზე. სასურველი სიგრძე: 250 სიმბოლო. თუ გესაჭიროებათ მეტად ვრცელი აღწერა, "
+"დარწმუნდით, რომ პირველ 250 სიმბოლოში მოექცევა მნიშვნელოვანი საკითხები."
 
 #: src/olympia/devhub/templates/devhub/addons/edit/describe.html:169
 msgid "Experimental?"
@@ -3083,7 +3087,7 @@ msgstr "თქვენი დამატება ამჟამად „უ
 
 #: src/olympia/devhub/templates/devhub/addons/includes/cant_submit_new_listed_versions_warning.html:5
 msgid "Your add-on listing was rejected."
-msgstr ""
+msgstr "თქვენი დამატების გამოქვეყნება უარყოფილია."
 
 #: src/olympia/devhub/templates/devhub/addons/includes/cant_submit_new_listed_versions_warning.html:7
 msgid "While in this state, \"On your own\" is the only distribution method available."
