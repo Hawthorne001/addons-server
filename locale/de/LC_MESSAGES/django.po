@@ -4403,7 +4403,7 @@ msgstr "Version wieder aktivieren"
 
 #: src/olympia/devhub/templates/devhub/versions/list.html:73
 msgid "Review History"
-msgstr "Chronik der Bewertungen"
+msgstr "Chronik der Überprüfungen"
 
 #: src/olympia/devhub/templates/devhub/versions/list.html:74
 msgid "Close Review History"
