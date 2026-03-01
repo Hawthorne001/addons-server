@@ -1835,7 +1835,7 @@ msgstr "这个杂项分类不能与其他分类混用。"
 
 #: src/olympia/devhub/forms.py:246 src/olympia/devhub/forms.py:1360
 msgid "There was an error uploading your image."
-msgstr ""
+msgstr "上传您的图片时发生错误。"
 
 #: src/olympia/devhub/forms.py:300
 #, python-format
